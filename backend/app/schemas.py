@@ -64,10 +64,23 @@ class HousingReport(BaseModel):
     summary: str
 
 
+class StockIdea(BaseModel):
+    ticker: str = Field(description="Ticker symbol for an individual stock")
+    allocation_pct: float = Field(description="Percent of investable portfolio allocated to this stock")
+    rationale: str = Field(description="Why this stock fits the user's profile and current market backdrop")
+    trend_signal: str = Field(description="Key market/news trend supporting this idea")
+
+
 class InvestmentReport(BaseModel):
     equity_pct: float = Field(description="Recommended equity allocation as % of investable assets")
     bond_pct: float = Field(description="Recommended bond allocation as %")
     recommended_etfs: List[str] = Field(description="Ticker list, e.g. ['VTI', 'VXUS', 'BND']")
+    etf_index_funds_pct: float = Field(description="Percent of the investable portfolio allocated to ETFs/index funds")
+    individual_stocks_pct: float = Field(description="Percent of the investable portfolio allocated to individual stocks")
+    individual_stock_ideas: List[StockIdea] = Field(
+        default_factory=list,
+        description="Suggested individual stock ideas with per-stock allocations and rationale",
+    )
     summary: str
 
 
