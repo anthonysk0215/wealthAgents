@@ -2,3 +2,23 @@
 backend/.venv/
 __pycache__/
 *.py[cod]
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+.vercel/
+
+# Misc
+.DS_Store
+*.log
+demo_cache.json

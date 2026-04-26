@@ -19,15 +19,15 @@ import sys
 import time
 from pathlib import Path
 
-# Add backend/app to sys.path so we can import schemas and orchestrator.
-sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
+# Add backend/ to sys.path so app.xxx imports resolve correctly.
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from orchestrator import run_pipeline  # noqa: E402
-from schemas import UserProfile         # noqa: E402
+from app.orchestrator import run_pipeline  # noqa: E402
+from app.schemas import UserProfile        # noqa: E402
 
 DEMO_PROFILE = UserProfile(
     name="Demo",
