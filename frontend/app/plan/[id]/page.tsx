@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { AlertTriangle, TrendingUp, Home, Shield, Briefcase, Zap } from "lucide-react"
+import { AlertTriangle, TrendingUp, Home, Shield, Briefcase, Zap, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -315,6 +315,9 @@ export default function PlanPage() {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [showDebateTranscript, setShowDebateTranscript] = useState(false)
+  const [showTwelveMonthRoadmap, setShowTwelveMonthRoadmap] = useState(false)
+  const [showFiveYearVision, setShowFiveYearVision] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -657,52 +660,65 @@ export default function PlanPage() {
         {/* Debate transcript (persist after loading) */}
         {debateEvents.length > 0 && (
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-            <h2 className="font-semibold text-foreground mb-4">Layer 2 Debate Transcript</h2>
-            <div className="space-y-3">
-              {debateEvents.map((ev, i) => {
-                const isBull = ev.stage.startsWith("bull_round_")
-                const isBear = ev.stage.startsWith("bear_round_")
-                const isVerdict = ev.stage === "debate_verdict"
+            <button
+              type="button"
+              onClick={() => setShowDebateTranscript((v) => !v)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <h2 className="font-semibold text-foreground">Debate Transcript</h2>
+              {showDebateTranscript ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+            {showDebateTranscript && (
+              <div className="space-y-3 mt-4">
+                {debateEvents.map((ev, i) => {
+                  const isBull = ev.stage.startsWith("bull_round_")
+                  const isBear = ev.stage.startsWith("bear_round_")
+                  const isVerdict = ev.stage === "debate_verdict"
 
-                if (!isBull && !isBear && !isVerdict) return null
+                  if (!isBull && !isBear && !isVerdict) return null
 
-                if (isVerdict) {
+                  if (isVerdict) {
+                    return (
+                      <div key={`done-debate-${i}`} className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                        <p className="text-xs font-semibold text-primary mb-1">Facilitator Verdict</p>
+                        <p className="text-sm text-foreground/90 leading-relaxed">
+                        {summarizeText(String(ev.payload.summary ?? extractMessage(ev.stage, ev.payload)), 110)}
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  const round = ev.stage.split("_").pop()
+                  const confidence = typeof ev.payload.confidence === "number"
+                    ? `${Math.round(Number(ev.payload.confidence) * 100)}%`
+                    : null
+
                   return (
-                    <div key={`done-debate-${i}`} className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
-                      <p className="text-xs font-semibold text-primary mb-1">Facilitator Verdict</p>
+                    <div
+                      key={`done-debate-${i}`}
+                      className={cn(
+                        "rounded-xl border px-4 py-3",
+                        isBull ? "border-emerald-900/60 bg-emerald-950/25" : "border-red-900/60 bg-red-950/25"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className={cn("text-xs font-semibold", isBull ? "text-emerald-400" : "text-red-400")}>
+                          {isBull ? "Bull Agent" : "Bear Agent"} · Round {round}
+                        </p>
+                        {confidence && <span className="text-[11px] text-muted-foreground">{confidence}</span>}
+                      </div>
                       <p className="text-sm text-foreground/90 leading-relaxed">
-                      {summarizeText(String(ev.payload.summary ?? extractMessage(ev.stage, ev.payload)), 110)}
+                        {summarizeText(String(ev.payload.argument ?? extractMessage(ev.stage, ev.payload)), 110)}
                       </p>
                     </div>
                   )
-                }
-
-                const round = ev.stage.split("_").pop()
-                const confidence = typeof ev.payload.confidence === "number"
-                  ? `${Math.round(Number(ev.payload.confidence) * 100)}%`
-                  : null
-
-                return (
-                  <div
-                    key={`done-debate-${i}`}
-                    className={cn(
-                      "rounded-xl border px-4 py-3",
-                      isBull ? "border-emerald-900/60 bg-emerald-950/25" : "border-red-900/60 bg-red-950/25"
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <p className={cn("text-xs font-semibold", isBull ? "text-emerald-400" : "text-red-400")}>
-                        {isBull ? "Bull Agent" : "Bear Agent"} · Round {round}
-                      </p>
-                      {confidence && <span className="text-[11px] text-muted-foreground">{confidence}</span>}
-                    </div>
-                    <p className="text-sm text-foreground/90 leading-relaxed">
-                      {summarizeText(String(ev.payload.argument ?? extractMessage(ev.stage, ev.payload)), 110)}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1111,18 +1127,78 @@ export default function PlanPage() {
 
         {/* 12-month roadmap */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-foreground mb-1">12-Month Roadmap</h2>
-          <p className="text-xs text-muted-foreground mb-6">Month-by-month action plan with specific steps and career growth checkpoints.</p>
-          <div className="relative pl-6 border-l-2 border-primary/30 space-y-5">
-            {plan.milestones_12mo.map((m, i) => (
-              <div key={i} className="relative">
-                <div className="absolute -left-[1.85rem] w-4 h-4 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                </div>
-                <div className="bg-muted/20 border border-border/60 rounded-xl p-4 hover:border-primary/30 transition-colors">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                      {m.month ? `Month ${m.month}` : `Step ${i + 1}`}
+          <button
+            type="button"
+            onClick={() => setShowTwelveMonthRoadmap((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <h2 className="font-semibold text-foreground">12-Month Roadmap</h2>
+            {showTwelveMonthRoadmap ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+          {showTwelveMonthRoadmap && (
+            <>
+              <p className="text-xs text-muted-foreground mt-1 mb-6">Month-by-month action plan with specific steps and career growth checkpoints.</p>
+              <div className="relative pl-6 border-l-2 border-primary/30 space-y-5">
+                {plan.milestones_12mo.map((m, i) => (
+                  <div key={i} className="relative">
+                    <div className="absolute -left-[1.85rem] w-4 h-4 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    </div>
+                    <div className="bg-muted/20 border border-border/60 rounded-xl p-4 hover:border-primary/30 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                          {m.month ? `Month ${m.month}` : `Step ${i + 1}`}
+                        </span>
+                        {m.target_metric && (
+                          <span className="text-xs font-semibold text-emerald-400">{m.target_metric}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">{m.label}</p>
+                      {m.action && (
+                        <div className="mt-2 flex gap-2 items-start">
+                          <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">Action</span>
+                          <p className="text-xs text-foreground/80">{m.action}</p>
+                        </div>
+                      )}
+                      {m.career_note && (
+                        <div className="mt-2 flex gap-2 items-start">
+                          <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide shrink-0 mt-0.5">Career</span>
+                          <p className="text-xs text-amber-300/80">{m.career_note}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 5-year vision */}
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowFiveYearVision((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <h2 className="font-semibold text-foreground">5-Year Vision</h2>
+            {showFiveYearVision ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+          {showFiveYearVision && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+              {plan.milestones_5yr.map((m, i) => (
+                <div key={i} className="bg-muted/30 rounded-xl p-4 border border-violet-500/20 hover:border-violet-500/40 transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
+                      {m.year ? `Year ${m.year}` : `Goal ${i + 1}`}
                     </span>
                     {m.target_metric && (
                       <span className="text-xs font-semibold text-emerald-400">{m.target_metric}</span>
@@ -1131,49 +1207,17 @@ export default function PlanPage() {
                   <p className="text-sm font-semibold text-foreground">{m.label}</p>
                   {m.action && (
                     <div className="mt-2 flex gap-2 items-start">
-                      <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">Action</span>
+                      <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">How</span>
                       <p className="text-xs text-foreground/80">{m.action}</p>
                     </div>
                   )}
                   {m.career_note && (
-                    <div className="mt-2 flex gap-2 items-start">
-                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide shrink-0 mt-0.5">Career</span>
-                      <p className="text-xs text-amber-300/80">{m.career_note}</p>
-                    </div>
+                    <p className="text-xs text-amber-300/70 mt-2 italic">{m.career_note}</p>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 5-year vision */}
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-foreground mb-5">5-Year Vision</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {plan.milestones_5yr.map((m, i) => (
-              <div key={i} className="bg-muted/30 rounded-xl p-4 border border-violet-500/20 hover:border-violet-500/40 transition-colors">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
-                    {m.year ? `Year ${m.year}` : `Goal ${i + 1}`}
-                  </span>
-                  {m.target_metric && (
-                    <span className="text-xs font-semibold text-emerald-400">{m.target_metric}</span>
-                  )}
-                </div>
-                <p className="text-sm font-semibold text-foreground">{m.label}</p>
-                {m.action && (
-                  <div className="mt-2 flex gap-2 items-start">
-                    <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">How</span>
-                    <p className="text-xs text-foreground/80">{m.action}</p>
-                  </div>
-                )}
-                {m.career_note && (
-                  <p className="text-xs text-amber-300/70 mt-2 italic">{m.career_note}</p>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
