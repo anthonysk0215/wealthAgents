@@ -19,27 +19,27 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable
 
-from schemas import (
+from app.schemas import (
     Layer1Reports,
     UserProfile,
     WealthPlan,
 )
-from market_data import get_all_market_data
-from agents.layer1 import (
+from app.market_data import get_all_market_data
+from app.agents.layer1 import (
     run_cash_flow_agent,
     run_housing_agent,
     run_investment_agent,
     run_retirement_agent,
 )
-from agents.layer2 import run_bear, run_bull, run_facilitator
-from agents.layer3 import run_allocator
-from agents.layer4 import (
+from app.agents.layer2 import run_bear, run_bull, run_facilitator
+from app.agents.layer3 import run_allocator
+from app.agents.layer4 import (
     run_aggressive_risk,
     run_conservative_risk,
     run_neutral_risk,
     run_risk_manager,
 )
-from agents.layer5 import run_wealth_manager
+from app.agents.layer5 import run_wealth_manager
 
 
 async def run_pipeline(

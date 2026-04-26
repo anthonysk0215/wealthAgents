@@ -4,11 +4,11 @@ WealthAgents — FastAPI server.
 Two endpoints + healthcheck. In-memory plan store keyed by UUID.
 SSE streaming via sse-starlette.
 
-START LOCAL:
-  uvicorn main:app --reload --port 8000
+START LOCAL (run from backend/):
+  uvicorn app.main:app --reload --port 8000
 
 START PRODUCTION (Render/Railway):
-  uvicorn main:app --host 0.0.0.0 --port $PORT
+  uvicorn app.main:app --host 0.0.0.0 --port $PORT
 """
 
 import asyncio
@@ -23,8 +23,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
-from schemas import UserProfile
-from orchestrator import run_pipeline
+from app.schemas import UserProfile
+from app.orchestrator import run_pipeline
 
 load_dotenv()
 

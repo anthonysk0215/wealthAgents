@@ -6,34 +6,58 @@ Argues for increasing upside exposure: shift weight from defensive buckets
 """
 from __future__ import annotations
 
-from schemas import AllocationPlan, RiskView, UserProfile
+from typing import Dict
+
+from pydantic import BaseModel
+
+from app.llm import call_llm
+from app.schemas import AllocationPlan, RiskView, UserProfile
+
+
+class _AggOut(BaseModel):
+    adjustments: Dict[str, float]
+    reasoning: str
+
+
+_SYSTEM = (
+    "You are an aggressive risk analyst reviewing a proposed financial allocation. "
+    "Your job is to find opportunities to increase return potential by shifting money "
+    "toward growth buckets (investing, speculative) and away from defensive ones (cash_emergency). "
+    "Rules you MUST follow:\n"
+    "- Net adjustments must sum to exactly 0 across all buckets.\n"
+    "- cash_emergency cannot drop below 5% of the total allocation.\n"
+    "- speculative cannot exceed 15% of the total allocation.\n"
+    "- Maximum shift per bucket: ±10 percentage points.\n"
+    "- Bucket names: cash_emergency, retirement, investing, house_fund, speculative.\n"
+    "Justify each shift with a specific fact from the user's profile."
+)
 
 
 async def run_aggressive_risk(
     profile: UserProfile,
     allocation: AllocationPlan,
 ) -> RiskView:
-    """
-    Propose upward risk adjustments to the allocator's plan.
-
-    Inputs:
-      - profile    → user context (age, risk_tolerance, income stability)
-      - allocation → proposed AllocationPlan from Layer 3
-
-    Returns:
-      RiskView(stance="aggressive", adjustments={bucket: delta_pct}, reasoning)
-
-    LLM prompt guidance:
-      System: "You are an aggressive risk analyst. Your job is to find
-      opportunities to increase return potential in the allocation plan.
-      Propose specific percentage shifts (e.g. -3 from cash_emergency,
-      +2 to investing, +1 to speculative). Keep total adjustments net-zero.
-      Do NOT recommend changes that would push cash_emergency below 5% or
-      speculative above 15%. Justify each adjustment with data from the profile."
-
-      adjustments dict example: {"cash_emergency": -3.0, "investing": 2.0, "speculative": 1.0}
-    """
-    raise NotImplementedError(
-        "run_aggressive_risk not implemented. "
-        "Replace this body with the ASI:One LLM call that returns RiskView."
+    user_prompt = (
+        f"Profile: {profile.name}, {profile.age}yo {profile.occupation}, "
+        f"risk_tolerance={profile.risk_tolerance}, salary=${profile.annual_salary:,.0f}, "
+        f"debt=${profile.debt_amount:,.0f}, savings=${profile.current_savings:,.0f}\n\n"
+        f"Proposed allocation:\n"
+        f"  cash_emergency: {allocation.cash_emergency_pct:.1f}%  (${allocation.monthly_amounts.get('cash_emergency', 0):,.0f}/mo)\n"
+        f"  retirement:     {allocation.retirement_pct:.1f}%  (${allocation.monthly_amounts.get('retirement', 0):,.0f}/mo)\n"
+        f"  investing:      {allocation.investing_pct:.1f}%  (${allocation.monthly_amounts.get('investing', 0):,.0f}/mo)\n"
+        f"  house_fund:     {allocation.house_fund_pct:.1f}%  (${allocation.monthly_amounts.get('house_fund', 0):,.0f}/mo)\n"
+        f"  speculative:    {allocation.speculative_pct:.1f}%  (${allocation.monthly_amounts.get('speculative', 0):,.0f}/mo)\n\n"
+        f"Allocator summary: {allocation.summary}\n\n"
+        f"Propose aggressive adjustments. Return adjustments dict and reasoning."
     )
+
+    out = await call_llm(_SYSTEM, user_prompt, _AggOut, temperature=0.6)
+
+    # Guardrails: clamp and net-zero enforce after LLM
+    adj = {k: round(v, 2) for k, v in out.adjustments.items()}
+    net = sum(adj.values())
+    if abs(net) > 0.01 and adj:
+        largest = max(adj, key=lambda k: abs(adj[k]))
+        adj[largest] = round(adj[largest] - net, 2)
+
+    return RiskView(stance="aggressive", adjustments=adj, reasoning=out.reasoning)
