@@ -1,37 +1,62 @@
 """
-Housing Analyst — Layer 1.
-
-Evaluates the feasibility of the user's housing goal and calculates
-the timeline to a 20% down payment.
+Housing Analyst - Layer 1.
 """
 from __future__ import annotations
 
-from schemas import HousingReport, UserProfile
+import re
+from typing import Optional
+
+from app.schemas import HousingReport, UserProfile
+
+
+def _parse_home_price(goal: str) -> Optional[float]:
+    million_match = re.search(r"\$\s*(\d+(?:\.\d+)?)\s*m\b", goal, re.IGNORECASE)
+    if million_match:
+        return float(million_match.group(1)) * 1_000_000
+
+    dollar_match = re.search(r"\$\s*([\d,]+(?:\.\d+)?)", goal)
+    if dollar_match:
+        return float(dollar_match.group(1).replace(",", ""))
+
+    return None
+
+
+def run(user: UserProfile) -> HousingReport:
+    estimated_home_price = _parse_home_price(user.primary_goal)
+    gross_monthly_income = user.annual_salary / 12
+    monthly_surplus = gross_monthly_income - user.monthly_expenses
+    months_until_target = max((user.target_age - user.age) * 12, 1)
+
+    if estimated_home_price is None:
+        down_payment_target = 0.0
+        remaining_down_payment = 0.0
+    else:
+        down_payment_target = estimated_home_price * 0.20
+        remaining_down_payment = max(down_payment_target - user.current_savings, 0.0)
+
+    required_monthly_savings = remaining_down_payment / months_until_target
+    feasible = monthly_surplus > 0 and required_monthly_savings <= monthly_surplus * 0.60
+
+    if remaining_down_payment == 0:
+        years_to_down_payment = 0.0
+    elif monthly_surplus > 0:
+        years_to_down_payment = remaining_down_payment / (monthly_surplus * 12)
+    else:
+        years_to_down_payment = float("inf")
+
+    if feasible:
+        summary = "Home goal is feasible if a dedicated house fund gets priority."
+    else:
+        summary = "Home goal is aggressive relative to current surplus."
+
+    return HousingReport(
+        feasible=feasible,
+        years_to_down_payment=round(years_to_down_payment, 2),
+        required_monthly_savings=round(required_monthly_savings, 2),
+        estimated_home_price=estimated_home_price,
+        summary=summary,
+    )
 
 
 async def run_housing_agent(profile: UserProfile) -> HousingReport:
-    """
-    Assess mortgage feasibility and down-payment timeline.
-
-    Inputs used:
-      - profile.primary_goal         → parse target home price if present
-      - profile.target_age / age     → years remaining to goal
-      - profile.annual_salary        → mortgage affordability (28% rule)
-      - profile.current_savings      → existing capital toward down payment
-      - profile.monthly_expenses     → debt-to-income context
-      - profile.debt_amount          → affects DTI ratio
-
-    Returns:
-      HousingReport with feasible, years_to_down_payment,
-      required_monthly_savings, estimated_home_price, summary.
-
-    LLM prompt guidance:
-      Standard 20% down payment target. Use the 28% gross income rule for
-      mortgage affordability. If the goal implies a price, extract it;
-      otherwise estimate based on 4-5× annual salary for the user's market.
-      Flag if DTI (including mortgage) would exceed 43%.
-    """
-    raise NotImplementedError(
-        "run_housing_agent not implemented. "
-        "Replace this body with the ASI:One LLM call that returns HousingReport."
-    )
+    return run(profile)
