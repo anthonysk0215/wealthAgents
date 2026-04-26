@@ -89,6 +89,14 @@ const AGENT_META: Record<string, AgentMeta> = {
   wealth_plan:         { name: "Wealth Manager",           align: "left",  nameColor: "text-primary",     bubbleClass: "border-primary/30 bg-primary/10" },
 }
 
+function summarizeText(text: string, maxLen = 150): string {
+  const clean = text.replace(/\s+/g, " ").trim()
+  if (!clean) return ""
+  const firstSentence = clean.split(/(?<=[.!?])\s+/)[0] ?? clean
+  if (firstSentence.length <= maxLen) return firstSentence
+  return `${firstSentence.slice(0, maxLen - 1).trimEnd()}…`
+}
+
 function extractMessage(stage: string, p: Record<string, unknown>): string {
   if (stage === "layer1_start")        return String(p.message ?? "Starting analysis pipeline...")
   if (stage === "market_data")         return `Mortgage rate: ${p.mortgage_rate_30yr ?? "—"}% · 10yr Treasury: ${p.treasury_10yr ?? "—"}% · CPI YoY: ${p.cpi_yoy ?? "—"}%`
@@ -98,9 +106,9 @@ function extractMessage(stage: string, p: Record<string, unknown>): string {
   if (stage === "investments")         return String(p.summary ?? "")
   if (stage.startsWith("bull_round_") || stage.startsWith("bear_round_")) {
     const conf = p.confidence ? ` (confidence: ${Math.round(Number(p.confidence) * 100)}%)` : ""
-    return String(p.argument ?? "") + conf
+    return summarizeText(String(p.argument ?? ""), 90) + conf
   }
-  if (stage === "debate_verdict")      return String(p.summary ?? "")
+  if (stage === "debate_verdict")      return summarizeText(String(p.summary ?? ""), 100)
   if (stage === "allocation_proposed") return String(p.summary ?? "")
   if (stage === "risk_aggressive" || stage === "risk_neutral" || stage === "risk_conservative") {
     return String(p.reasoning ?? "")
@@ -220,72 +228,78 @@ export default function PlanPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    const es = new EventSource(`${API}/api/plan/${id}/stream`)
 
-    async function stream() {
-      const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const res = await fetch(`${API}/api/plan/${id}/stream`)
-      if (!res.ok) {
-        const msg = res.status === 404
-          ? "Plan not found — the backend may have restarted. Please go back and submit the form again."
-          : `Server error ${res.status}`
-        setError(msg)
-        setStatus("error")
-        return
-      }
-      if (!res.body) return
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-      let currentEvent = "message"
-
-      while (!cancelled) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
-        buffer = lines.pop() ?? ""
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7).trim()
-          } else if (line.startsWith("data: ")) {
-            try {
-              const payload = JSON.parse(line.slice(6))
-              if (currentEvent === "done") {
-                setPlan(payload as WealthPlan)
-                setStatus("done")
-                return
-              } else if (currentEvent === "error") {
-                setError((payload as { message: string }).message)
-                setStatus("error")
-                return
-              } else {
-                setStatus("streaming")
-                setEvents((prev) => [...prev, { stage: currentEvent, payload }])
-                if (currentEvent === "risk_final") {
-                  setWarnings((payload as { warnings?: string[] }).warnings ?? [])
-                }
-              }
-            } catch { /* ignore partial JSON */ }
-            currentEvent = "message"
-          }
+    const handleStageEvent = (stage: string, raw: string) => {
+      try {
+        const payload = JSON.parse(raw)
+        if (stage === "done") {
+          setPlan(payload as WealthPlan)
+          setStatus("done")
+          es.close()
+          return
         }
+        if (stage === "error") {
+          setError((payload as { message?: string }).message ?? "Stream error")
+          setStatus("error")
+          es.close()
+          return
+        }
+
+        setStatus("streaming")
+        setEvents((prev) => [...prev, { stage, payload }])
+        if (stage === "risk_final") {
+          setWarnings((payload as { warnings?: string[] }).warnings ?? [])
+        }
+      } catch {
+        // ignore non-JSON keepalive frames
       }
     }
 
-    stream().catch((e) => { setError(String(e)); setStatus("error") })
-    return () => { cancelled = true }
+    const stageNames = [
+      ...Object.keys(AGENT_META),
+      "done",
+      "error",
+    ]
+
+    const listeners: Array<{ stage: string; fn: (e: MessageEvent) => void }> = stageNames.map((stage) => {
+      const fn = (e: MessageEvent) => handleStageEvent(stage, e.data)
+      es.addEventListener(stage, fn)
+      return { stage, fn }
+    })
+
+    es.onerror = () => {
+      setError("Stream connection lost.")
+      setStatus("error")
+      es.close()
+    }
+
+    return () => {
+      listeners.forEach(({ stage, fn }) => es.removeEventListener(stage, fn))
+      es.close()
+    }
   }, [id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [events])
 
+  useEffect(() => {
+    if (status === "done") {
+      window.scrollTo({ top: 0, behavior: "auto" })
+    }
+  }, [status])
+
   const completedStages = new Set(events.map((e) => e.stage))
   const progress = Math.round((completedStages.size / TOTAL_STAGES) * 100)
+  const debateEvents = events.filter(
+    (e) =>
+      e.stage.startsWith("bull_round_") ||
+      e.stage.startsWith("bear_round_") ||
+      e.stage === "debate_verdict"
+  )
+  const debateStarted = debateEvents.some((e) => e.stage.startsWith("bull_round_") || e.stage.startsWith("bear_round_"))
 
   // ── Error ────────────────────────────────────────────────────────────────────
   if (status === "error") {
@@ -328,6 +342,65 @@ export default function PlanPage() {
 
         {/* Conversation feed */}
         <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-1">
+          <div className="mb-6 rounded-2xl border border-border bg-card/60 p-4 md:p-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="text-sm font-semibold text-foreground">Layer 2 Live Debate</h2>
+              <span className="text-[11px] text-muted-foreground">Bull vs Bear + Facilitator</span>
+            </div>
+
+            {!debateStarted ? (
+              <p className="text-xs text-muted-foreground">
+                Analysts are finishing context. Debate starts as soon as Layer 1 reports are complete.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {debateEvents.map((ev, i) => {
+                  const isBull = ev.stage.startsWith("bull_round_")
+                  const isBear = ev.stage.startsWith("bear_round_")
+                  const isVerdict = ev.stage === "debate_verdict"
+
+                  if (!isBull && !isBear && !isVerdict) return null
+
+                  if (isVerdict) {
+                    return (
+                      <div key={`debate-${i}`} className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5">
+                        <p className="text-[11px] font-semibold text-primary mb-1">Facilitator Verdict</p>
+                        <p className="text-xs text-foreground/90 leading-relaxed">{extractMessage(ev.stage, ev.payload)}</p>
+                      </div>
+                    )
+                  }
+
+                  const round = ev.stage.split("_").pop()
+                  const confidence = typeof ev.payload.confidence === "number"
+                    ? `${Math.round(Number(ev.payload.confidence) * 100)}%`
+                    : null
+
+                  return (
+                    <div
+                      key={`debate-${i}`}
+                      className={cn(
+                        "rounded-xl border px-3 py-2.5",
+                        isBull
+                          ? "border-emerald-900/60 bg-emerald-950/25"
+                          : "border-red-900/60 bg-red-950/25"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className={cn("text-[11px] font-semibold", isBull ? "text-emerald-400" : "text-red-400")}>
+                          {isBull ? "Bull Agent" : "Bear Agent"} · Round {round}
+                        </p>
+                        {confidence && <span className="text-[10px] text-muted-foreground">{confidence}</span>}
+                      </div>
+                      <p className="text-xs text-foreground/90 leading-relaxed">
+                        {summarizeText(String(ev.payload.argument ?? ""), 95)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {events.map((ev, i) => {
             const meta = AGENT_META[ev.stage]
             if (!meta) return null
@@ -454,6 +527,58 @@ export default function PlanPage() {
                 <span className="text-amber-500 shrink-0">•</span> {w}
               </p>
             ))}
+          </div>
+        )}
+
+        {/* Debate transcript (persist after loading) */}
+        {debateEvents.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+            <h2 className="font-semibold text-foreground mb-4">Layer 2 Debate Transcript</h2>
+            <div className="space-y-3">
+              {debateEvents.map((ev, i) => {
+                const isBull = ev.stage.startsWith("bull_round_")
+                const isBear = ev.stage.startsWith("bear_round_")
+                const isVerdict = ev.stage === "debate_verdict"
+
+                if (!isBull && !isBear && !isVerdict) return null
+
+                if (isVerdict) {
+                  return (
+                    <div key={`done-debate-${i}`} className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                      <p className="text-xs font-semibold text-primary mb-1">Facilitator Verdict</p>
+                      <p className="text-sm text-foreground/90 leading-relaxed">
+                      {summarizeText(String(ev.payload.summary ?? extractMessage(ev.stage, ev.payload)), 110)}
+                      </p>
+                    </div>
+                  )
+                }
+
+                const round = ev.stage.split("_").pop()
+                const confidence = typeof ev.payload.confidence === "number"
+                  ? `${Math.round(Number(ev.payload.confidence) * 100)}%`
+                  : null
+
+                return (
+                  <div
+                    key={`done-debate-${i}`}
+                    className={cn(
+                      "rounded-xl border px-4 py-3",
+                      isBull ? "border-emerald-900/60 bg-emerald-950/25" : "border-red-900/60 bg-red-950/25"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className={cn("text-xs font-semibold", isBull ? "text-emerald-400" : "text-red-400")}>
+                        {isBull ? "Bull Agent" : "Bear Agent"} · Round {round}
+                      </p>
+                      {confidence && <span className="text-[11px] text-muted-foreground">{confidence}</span>}
+                    </div>
+                    <p className="text-sm text-foreground/90 leading-relaxed">
+                      {summarizeText(String(ev.payload.argument ?? extractMessage(ev.stage, ev.payload)), 110)}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

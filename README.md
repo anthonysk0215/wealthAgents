@@ -103,7 +103,7 @@ The app will be available at `http://localhost:3000`.
 
 ## Running the Full Stack
 
-Open two terminals:
+Open three terminals:
 
 **Terminal 1 — Backend:**
 ```bash
@@ -112,13 +112,25 @@ source venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 ```
 
-**Terminal 2 — Frontend:**
+**Terminal 2 — Layer 2 uAgents (Bull / Bear / Facilitator):**
+```bash
+cd backend
+source venv/bin/activate
+set -a; source .env; set +a
+python3 -m app.agents.layer2.run_all
+```
+
+**Terminal 3 — Frontend:**
 ```bash
 cd frontend
 pnpm dev
 ```
 
 Then open `http://localhost:3000` in your browser.
+
+Notes:
+- Layer 2 uAgents may log Almanac/mailbox warnings in local development; this does not block local pipeline testing.
+- Keep Backend and Layer 2 uAgents in separate terminals because both run long-lived processes.
 
 ---
 
