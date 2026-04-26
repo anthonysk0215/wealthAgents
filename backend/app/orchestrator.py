@@ -109,6 +109,7 @@ async def run_pipeline(
         profile=profile,
         bull_rounds=bull_rounds,
         bear_rounds=bear_rounds,
+        layer1=layer1,
     )
     fire("debate_verdict", verdict)
 

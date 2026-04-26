@@ -22,3 +22,8 @@ node_modules/
 .DS_Store
 *.log
 demo_cache.json
+
+# Backend env exceptions
+backend/.env
+backend/.env.*
+!backend/.env.example
