@@ -2,7 +2,19 @@
 
 import React, { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { AlertTriangle, TrendingUp, Home, Shield, Briefcase, Zap, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Briefcase,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Home,
+  Plus,
+  Shield,
+  TrendingUp,
+  Zap,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -315,6 +327,7 @@ export default function PlanPage() {
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [savedReportId, setSavedReportId] = useState<string | null>(null)
   const [showDebateTranscript, setShowDebateTranscript] = useState(false)
   const [showTwelveMonthRoadmap, setShowTwelveMonthRoadmap] = useState(false)
   const [showFiveYearVision, setShowFiveYearVision] = useState(false)
@@ -346,6 +359,10 @@ export default function PlanPage() {
           es.close()
           return
         }
+        if (stage === "report_saved") {
+          setSavedReportId(String((payload as { report_id?: string }).report_id ?? ""))
+          return
+        }
 
         setStatus("streaming")
         setEvents((prev) => [...prev, { stage, payload }])
@@ -359,6 +376,7 @@ export default function PlanPage() {
 
     const stageNames = [
       ...Object.keys(AGENT_META),
+      "report_saved",
       "done",
       "error",
     ]
@@ -427,6 +445,24 @@ export default function PlanPage() {
         {/* Sticky header with progress */}
         <div className="sticky top-0 z-10 bg-background/90 backdrop-blur border-b border-border px-4 py-4">
           <div className="max-w-2xl mx-auto">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/#intake-section")}
+                className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to form
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/history")}
+                className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <History className="h-4 w-4" />
+                History
+              </button>
+            </div>
             <div className="flex items-center justify-between mb-2">
               <h1 className="text-base font-semibold text-foreground">Building your wealth plan</h1>
               <span className="text-xs text-muted-foreground">{progress}%</span>
@@ -626,6 +662,44 @@ export default function PlanPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
+      <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/#intake-section")}
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Form
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Home className="h-4 w-4" />
+              Home
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/#intake-section")}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              New plan
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push(savedReportId ? `/history/${savedReportId}` : "/history")}
+            className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <History className="h-4 w-4" />
+            {savedReportId ? "Saved report" : "History"}
+          </button>
+        </div>
+      </div>
       <div className="max-w-4xl mx-auto px-4 py-12 space-y-10">
 
         {/* Header */}
@@ -638,6 +712,16 @@ export default function PlanPage() {
               <p className="text-xs text-muted-foreground mt-2">
                 {profile.name} · {profile.age}yo {profile.occupation} · ${profile.annual_salary.toLocaleString()}/yr
               </p>
+            )}
+            {savedReportId && (
+              <button
+                type="button"
+                onClick={() => router.push(`/history/${savedReportId}`)}
+                className="mt-4 inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              >
+                <History className="h-4 w-4" />
+                View saved report
+              </button>
             )}
           </div>
         </div>
