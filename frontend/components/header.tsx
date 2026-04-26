@@ -4,10 +4,18 @@ import type React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Menu } from "lucide-react"
+import { History, LogIn, Menu, UserCircle } from "lucide-react"
 import Link from "next/link" // Import Link for client-side navigation
+import { clearAuth, getStoredUser } from "@/lib/auth"
+import { useEffect, useState } from "react"
 
 export function Header() {
+  const [userName, setUserName] = useState<string | null>(null)
+
+  useEffect(() => {
+    setUserName(getStoredUser()?.name ?? null)
+  }, [])
+
   const navItems = [
     { name: "How It Works", href: "#features-section" },
     { name: "FAQ", href: "#faq-section" },
@@ -43,6 +51,34 @@ export function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          {userName ? (
+            <>
+              <Link href="/history" className="hidden md:block">
+                <Button variant="ghost" className="rounded-full gap-2">
+                  <History className="h-4 w-4" />
+                  History
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                className="hidden md:flex rounded-full gap-2"
+                onClick={() => {
+                  clearAuth()
+                  setUserName(null)
+                }}
+              >
+                <UserCircle className="h-4 w-4" />
+                {userName}
+              </Button>
+            </>
+          ) : (
+            <Link href="/login" className="hidden md:block">
+              <Button variant="ghost" className="rounded-full gap-2">
+                <LogIn className="h-4 w-4" />
+                Login
+              </Button>
+            </Link>
+          )}
           <Link href="#intake-section" className="hidden md:block">
             <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm">
               Build My Plan
@@ -70,6 +106,27 @@ export function Header() {
                     {item.name}
                   </Link>
                 ))}
+                {userName ? (
+                  <>
+                    <Link href="/history" className="text-[#888888] hover:text-foreground justify-start text-lg py-2">
+                      History
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAuth()
+                        setUserName(null)
+                      }}
+                      className="text-left text-[#888888] hover:text-foreground justify-start text-lg py-2"
+                    >
+                      Sign out {userName}
+                    </button>
+                  </>
+                ) : (
+                  <Link href="/login" className="text-[#888888] hover:text-foreground justify-start text-lg py-2">
+                    Login
+                  </Link>
+                )}
                 <Link href="#intake-section" className="w-full mt-4">
                   <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-6 py-2 rounded-full font-medium shadow-sm">
                     Build My Plan

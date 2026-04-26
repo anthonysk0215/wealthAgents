@@ -17,6 +17,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from sqlite3 import IntegrityError
 from typing import Dict, Optional
 
 logging.basicConfig(
@@ -26,16 +27,75 @@ logging.basicConfig(
 )
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from app.schemas import UserProfile
 from app.orchestrator import run_pipeline
+from app.accounts import (
+    authenticate_user,
+    create_session,
+    create_user,
+    delete_report,
+    delete_session,
+    get_report,
+    get_user_by_token,
+    init_db,
+    list_reports,
+    save_report,
+)
 
 load_dotenv()
 
 app = FastAPI(title="WealthAgents API")
+init_db()
+
+
+class AuthRequest(BaseModel):
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=6)
+
+
+class RegisterRequest(AuthRequest):
+    name: str = Field(min_length=1)
+
+
+def _token_from_header(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
+
+
+def optional_current_user(authorization: Optional[str] = Header(default=None)):
+    token = _token_from_header(authorization)
+    if not token:
+        return None
+    user = get_user_by_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
+
+
+def require_current_user(authorization: Optional[str] = Header(default=None)):
+    token = _token_from_header(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    user = get_user_by_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
+
+
+def require_token(authorization: Optional[str] = Header(default=None)) -> str:
+    token = _token_from_header(authorization)
+    if not token or get_user_by_token(token) is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return token
 
 # =============================================================
 # CORS
@@ -76,11 +136,67 @@ async def healthz():
 
 
 # =============================================================
+# Accounts
+# =============================================================
+
+@app.post("/api/auth/register")
+async def register(req: RegisterRequest):
+    if not req.name.strip():
+        raise HTTPException(status_code=422, detail="Name is required")
+    try:
+        user = create_user(req.email, req.password, req.name)
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    token = create_session(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/login")
+async def login(req: AuthRequest):
+    user = authenticate_user(req.email, req.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_session(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/logout")
+async def logout(token: str = Depends(require_token)):
+    delete_session(token)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+async def me(user=Depends(require_current_user)):
+    return {"user": user}
+
+
+@app.get("/api/reports")
+async def reports(user=Depends(require_current_user)):
+    return {"reports": list_reports(user["id"])}
+
+
+@app.get("/api/reports/{report_id}")
+async def report_detail(report_id: str, user=Depends(require_current_user)):
+    report = get_report(user["id"], report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report
+
+
+@app.delete("/api/reports/{report_id}")
+async def remove_report(report_id: str, user=Depends(require_current_user)):
+    if not delete_report(user["id"], report_id):
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"ok": True}
+
+
+# =============================================================
 # Start a plan
 # =============================================================
 
 @app.post("/api/plan/start")
-async def start_plan(profile: UserProfile):
+async def start_plan(profile: UserProfile, user=Depends(optional_current_user)):
     """
     Validate the user profile, register a plan_id, and kick off
     the orchestrator pipeline as a background task. The pipeline
@@ -88,7 +204,12 @@ async def start_plan(profile: UserProfile):
     the /stream endpoint consumes.
     """
     plan_id = str(uuid.uuid4())
-    store: dict = {"events": [], "done": False, "notify": asyncio.Event()}
+    store: dict = {
+        "events": [],
+        "done": False,
+        "notify": asyncio.Event(),
+        "user_id": user["id"] if user else None,
+    }
     plans[plan_id] = store
 
     async def background():
@@ -101,6 +222,12 @@ async def start_plan(profile: UserProfile):
 
         try:
             plan = await run_pipeline(profile, on_event=on_event)
+            if store.get("user_id"):
+                report_id = save_report(store["user_id"], plan_id, profile, plan)
+                store["events"].append({
+                    "event": "report_saved",
+                    "data": json.dumps({"report_id": report_id}),
+                })
             store["events"].append({
                 "event": "done",
                 "data": plan.model_dump_json(),
