@@ -24,6 +24,7 @@ from schemas import (
     UserProfile,
     WealthPlan,
 )
+from market_data import get_all_market_data
 from agents.layer1 import (
     run_cash_flow_agent,
     run_housing_agent,
@@ -58,14 +59,20 @@ async def run_pipeline(
         on_event(stage, data)
         transcript.append({"stage": stage, "payload": data})
 
-    # ── LAYER 1 — 4 analysts, fully parallel ─────────────────────────────────
-    fire("layer1_start", {"message": "Analyst team convening..."})
+    # ── LAYER 1 — fetch live market data, then run 4 analysts in parallel ──────
+    fire("layer1_start", {"message": "Fetching live market data..."})
+    market = await get_all_market_data()
+    fire("market_data", {
+        "mortgage_rate_30yr": market["mortgage_rate_30yr"],
+        "treasury_10yr": market["treasury_10yr"],
+        "cpi_yoy": market["cpi_yoy"],
+    })
 
     cf, ret, hou, inv = await asyncio.gather(
-        run_cash_flow_agent(profile),
-        run_retirement_agent(profile),
-        run_housing_agent(profile),
-        run_investment_agent(profile),
+        run_cash_flow_agent(profile, market),
+        run_retirement_agent(profile, market),
+        run_housing_agent(profile, market),
+        run_investment_agent(profile, market),
     )
 
     layer1 = Layer1Reports(cash_flow=cf, retirement=ret, housing=hou, investment=inv)
