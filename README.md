@@ -55,7 +55,19 @@ ASI_ONE_MODEL=asi1-mini
 
 # Optional — comma-separated origins allowed by CORS (default: localhost:3000)
 ALLOWED_ORIGINS=http://localhost:3000
+
+# Optional — shared Supabase/Postgres database for custom accounts + saved reports.
+# If omitted, backend falls back to local SQLite at backend/app/data/wealthagents.sqlite3.
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-us-west-1.pooler.supabase.com:5432/postgres?sslmode=require
+
+# Required for Supabase Auth sign-in bridge.
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
+
+For Supabase, click **Connect** in your project dashboard and copy the pooled Postgres connection string.
+Use the session pooler URL and keep `sslmode=require`. These app accounts are stored in custom
+`public.users`, `public.sessions`, and `public.reports` tables; they will not appear under Supabase Auth users.
 
 ### Run the backend
 
@@ -89,6 +101,8 @@ Create `frontend/.env.local`:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
 ### Run the frontend

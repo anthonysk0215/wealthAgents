@@ -17,7 +17,6 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from sqlite3 import IntegrityError
 from typing import Dict, Optional
 
 logging.basicConfig(
@@ -31,11 +30,16 @@ from pydantic import BaseModel, Field
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+import httpx
+
+load_dotenv()
 
 from app.schemas import UserProfile
 from app.orchestrator import run_pipeline
 from app.accounts import (
+    DuplicateEmailError,
     authenticate_user,
+    create_or_get_oauth_user,
     create_session,
     create_user,
     delete_report,
@@ -45,9 +49,8 @@ from app.accounts import (
     init_db,
     list_reports,
     save_report,
+    using_postgres,
 )
-
-load_dotenv()
 
 app = FastAPI(title="WealthAgents API")
 init_db()
@@ -60,6 +63,30 @@ class AuthRequest(BaseModel):
 
 class RegisterRequest(AuthRequest):
     name: str = Field(min_length=1)
+
+
+class SupabaseAuthRequest(BaseModel):
+    access_token: str = Field(min_length=1)
+
+
+async def _get_supabase_user(access_token: str) -> dict:
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+    if not supabase_url or not supabase_anon_key:
+        raise HTTPException(status_code=500, detail="Supabase Auth is not configured")
+
+    auth_url = f"{supabase_url.rstrip('/')}/auth/v1/user"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.get(
+            auth_url,
+            headers={
+                "apikey": supabase_anon_key,
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+    if res.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Supabase session")
+    return res.json()
 
 
 def _token_from_header(authorization: Optional[str]) -> Optional[str]:
@@ -132,7 +159,11 @@ plans: Dict[str, dict] = {}
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True, "service": "wealthagents-api"}
+    return {
+        "ok": True,
+        "service": "wealthagents-api",
+        "database": "postgres" if using_postgres() else "sqlite",
+    }
 
 
 # =============================================================
@@ -145,7 +176,7 @@ async def register(req: RegisterRequest):
         raise HTTPException(status_code=422, detail="Name is required")
     try:
         user = create_user(req.email, req.password, req.name)
-    except IntegrityError:
+    except DuplicateEmailError:
         raise HTTPException(status_code=409, detail="Email already registered")
     token = create_session(user["id"])
     return {"token": token, "user": user}
@@ -156,6 +187,31 @@ async def login(req: AuthRequest):
     user = authenticate_user(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_session(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/supabase")
+async def supabase_login(req: SupabaseAuthRequest):
+    supabase_user = await _get_supabase_user(req.access_token)
+    email = supabase_user.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Supabase user has no email")
+
+    metadata = supabase_user.get("user_metadata") or {}
+    display_name = (
+        metadata.get("full_name")
+        or metadata.get("name")
+        or metadata.get("preferred_username")
+        or email.split("@")[0]
+    )
+
+    user = create_or_get_oauth_user(
+        email=email,
+        name=display_name,
+        provider="supabase",
+        provider_subject=supabase_user["id"],
+    )
     token = create_session(user["id"])
     return {"token": token, "user": user}
 

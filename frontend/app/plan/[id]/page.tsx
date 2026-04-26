@@ -343,12 +343,52 @@ export default function PlanPage() {
 
   useEffect(() => {
     try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("saved") === "true") {
+        const rawSaved = sessionStorage.getItem("wealthSavedReport")
+        if (!rawSaved) {
+          setError("Saved report data was not found. Open it again from History.")
+          setStatus("error")
+          return
+        }
+
+        const saved = JSON.parse(rawSaved) as {
+          id?: string
+          profile?: UserProfile
+          plan?: WealthPlan
+        }
+        if (!saved.plan) {
+          setError("Saved report is missing plan data.")
+          setStatus("error")
+          return
+        }
+
+        const transcript = Array.isArray(saved.plan.agent_transcript) ? saved.plan.agent_transcript : []
+        const restoredEvents = transcript
+          .map((entry) => {
+            const stage = String(entry.stage ?? entry.event ?? "")
+            const payload = (entry.payload ?? entry.data ?? entry) as Record<string, unknown>
+            return stage ? { stage, payload } : null
+          })
+          .filter(Boolean) as AgentEvent[]
+
+        setSavedReportId(saved.id ?? params.get("report_id"))
+        setProfile(saved.profile ?? null)
+        setEvents(restoredEvents)
+        setWarnings(saved.plan.plan_insights?.risk_warnings ?? [])
+        setPlan(saved.plan)
+        setStatus("done")
+        return
+      }
+
       const raw = sessionStorage.getItem("wealthProfile")
       if (raw) setProfile(JSON.parse(raw))
     } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("saved") === "true") return
+
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
     const es = new EventSource(`${API}/api/plan/${id}/stream`)
 
