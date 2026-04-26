@@ -19,12 +19,12 @@ const SpecializedAgents: React.FC<SpecializedAgentsProps> = ({ className = "" })
   }
 
   const agents = [
-    { icon: "💰", title: "Cash Flow Analyst", desc: "Income, expenses, surplus analysis" },
-    { icon: "🏦", title: "Retirement Analyst", desc: "401k, IRA, pension optimization" },
-    { icon: "🏠", title: "Housing Analyst", desc: "Affordability, timeline, mortgage" },
-    { icon: "📊", title: "Investment Analyst", desc: "Asset allocation, diversification" },
-    { icon: "📈", title: "Bull Agent", desc: "Aggressive growth strategies" },
-    { icon: "📉", title: "Bear Agent", desc: "Risk mitigation, safety nets" },
+    { title: "Cash Flow Analyst", desc: "Income, expenses, surplus analysis" },
+    { title: "Retirement Analyst", desc: "401k, IRA, pension optimization" },
+    { title: "Housing Analyst", desc: "Affordability, timeline, mortgage" },
+    { title: "Investment Analyst", desc: "Asset allocation, diversification" },
+    { title: "Bull Agent", desc: "Aggressive growth strategies" },
+    { title: "Bear Agent", desc: "Risk mitigation, safety nets" },
   ]
 
   return (
@@ -82,9 +82,6 @@ const SpecializedAgents: React.FC<SpecializedAgentsProps> = ({ className = "" })
               boxSizing: "border-box",
             }}
           >
-            <div style={{ fontSize: "16px", flexShrink: 0 }}>
-              {agent.icon}
-            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{

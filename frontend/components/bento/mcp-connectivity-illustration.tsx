@@ -8,21 +8,18 @@ const RiskCalibration: React.FC<RiskCalibrationProps> = ({ className = "" }) => 
   const riskPersonas = [
     { 
       name: "Aggressive", 
-      icon: "🚀", 
       adjustment: "+3 investing, -3 cash",
       color: "#22C55E",
       active: false
     },
     { 
       name: "Neutral", 
-      icon: "⚖️", 
       adjustment: "No change",
       color: "#F59E0B",
       active: true
     },
     { 
       name: "Conservative", 
-      icon: "🛡️", 
       adjustment: "+5 cash, -3 speculative",
       color: "#3B82F6",
       active: false
@@ -105,7 +102,6 @@ const RiskCalibration: React.FC<RiskCalibrationProps> = ({ className = "" }) => 
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "4px" }}>
-                <span style={{ fontSize: "12px" }}>{persona.icon}</span>
                 <span style={{
                   fontFamily: "'Geist', sans-serif",
                   fontSize: "9px",
