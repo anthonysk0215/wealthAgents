@@ -1,35 +1,31 @@
 """
-Investment Analyst — Layer 1.
-
-Recommends a long-term equity/bond split and specific ETFs based on
-the user's time horizon and stated risk tolerance.
+Investment Analyst - Layer 1.
 """
 from __future__ import annotations
 
-from schemas import InvestmentReport, UserProfile
+from app.schemas import InvestmentReport, UserProfile
+
+
+def run(user: UserProfile) -> InvestmentReport:
+    adjustment = {
+        "conservative": -15,
+        "moderate": -5,
+        "moderate_aggressive": 0,
+        "aggressive": 5,
+    }[user.risk_tolerance]
+
+    equity_pct = 110 - user.age + adjustment
+    equity_pct = min(max(equity_pct, 40), 95)
+    bond_pct = 100 - equity_pct
+    recommended_etfs = ["VTI", "VXUS", "BND"]
+
+    return InvestmentReport(
+        equity_pct=round(equity_pct, 2),
+        bond_pct=round(bond_pct, 2),
+        recommended_etfs=recommended_etfs,
+        summary=f"{round(equity_pct):.0f}/{round(bond_pct):.0f} equity/bond mix using broad low-cost ETFs.",
+    )
 
 
 async def run_investment_agent(profile: UserProfile) -> InvestmentReport:
-    """
-    Recommend equity/bond allocation and ETF picks.
-
-    Inputs used:
-      - profile.risk_tolerance        → conservative/moderate/aggressive
-      - profile.age / profile.target_age → time horizon
-      - profile.taxable_investments   → existing portfolio context
-      - profile.retirement_balance    → total invested assets context
-
-    Returns:
-      InvestmentReport with equity_pct, bond_pct, recommended_etfs, summary.
-
-    LLM prompt guidance:
-      Use age-based glide path as baseline (e.g. 110 - age = equity %).
-      Adjust up/down based on risk_tolerance. Prefer low-cost broad index ETFs:
-      VTI (US total market), VXUS (international), BND (bonds), SCHD (dividend).
-      If speculative tolerance is present, allow up to 5-10% in QQQ or sector ETFs.
-      summary should name the strategy, e.g. "90/10 equity/bonds, VTI + VXUS core."
-    """
-    raise NotImplementedError(
-        "run_investment_agent not implemented. "
-        "Replace this body with the ASI:One LLM call that returns InvestmentReport."
-    )
+    return run(profile)
