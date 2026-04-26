@@ -52,20 +52,14 @@ def run(user: UserProfile) -> CashFlowReport:
 
 async def run_cash_flow_agent(profile: UserProfile, market: dict[str, Any]) -> CashFlowReport:
     """
-    Full agent: cash flow math + live CPI context + LLM-generated insight.
+    Full agent: cash flow math with deterministic summary (no LLM call for speed).
     """
     cpi = market.get("cpi_yoy", 3.2)
     report = run(profile)
-
-    real_surplus = report.monthly_surplus / (1 + cpi / 100)
-
-    user_prompt = (
-        f"{profile.name}, {profile.age}yo {profile.occupation}.\n"
-        f"Monthly surplus: ${report.monthly_surplus:,.0f} (nominal) / ${real_surplus:,.0f} (real, after {cpi:.1f}% CPI)\n"
-        f"Savings rate: {report.savings_rate:.1f}% | Burn rate: {report.burn_rate:.1f}%\n"
-        f"Primary goal: {profile.primary_goal}\n"
-        f"Monthly expenses: ${profile.monthly_expenses:,.0f} | Gross monthly: ${profile.annual_salary / 12:,.0f}"
+    surplus = report.monthly_surplus
+    real = surplus / (1 + cpi / 100)
+    summary = (
+        f"Monthly surplus ${surplus:,.0f} (${real:,.0f} real at {cpi:.1f}% CPI); "
+        f"savings rate {report.savings_rate:.1f}%."
     )
-
-    insight = await call_llm(_INSIGHT_SYSTEM, user_prompt, Insight, temperature=0.3)
-    return report.model_copy(update={"summary": insight.summary})
+    return report.model_copy(update={"summary": summary})

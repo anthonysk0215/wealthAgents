@@ -81,33 +81,17 @@ def run(user: UserProfile, mortgage_rate: float = 6.8) -> HousingReport:
 
 async def run_housing_agent(profile: UserProfile, market: dict[str, Any]) -> HousingReport:
     """
-    Full agent: real mortgage rate + math + LLM-generated insight summary.
+    Full agent: real mortgage rate + math with deterministic summary (no LLM call for speed).
     """
     mortgage_rate = market.get("mortgage_rate_30yr", 6.8)
     report = run(profile, mortgage_rate=mortgage_rate)
-
     if report.estimated_home_price:
         loan = report.estimated_home_price * 0.80
         monthly_payment = _monthly_pi(loan, mortgage_rate)
-        gross_monthly = profile.annual_salary / 12
-        dti = (monthly_payment + profile.monthly_expenses) / gross_monthly * 100
-        down_remaining = max(report.estimated_home_price * 0.20 - profile.current_savings, 0.0)
-
-        user_prompt = (
-            f"{profile.name}, {profile.age}yo, goal: {profile.primary_goal} by age {profile.target_age}.\n"
-            f"Home price: ${report.estimated_home_price:,.0f} | 20% down: ${report.estimated_home_price * 0.20:,.0f} "
-            f"(still need ${down_remaining:,.0f})\n"
-            f"Live 30yr rate: {mortgage_rate:.2f}% → monthly P&I: ${monthly_payment:,.0f}\n"
-            f"Post-mortgage DTI: {dti:.1f}% (safe < 43%)\n"
-            f"Years to down payment at current savings rate: {report.years_to_down_payment:.1f}\n"
-            f"Monthly required for house fund: ${report.required_monthly_savings:,.0f}"
+        summary = (
+            f"${report.estimated_home_price:,.0f} home at {mortgage_rate:.2f}% → "
+            f"${monthly_payment:,.0f}/mo P&I; {report.years_to_down_payment:.1f} yrs to down payment."
         )
     else:
-        user_prompt = (
-            f"{profile.name}, {profile.age}yo, goal: {profile.primary_goal}.\n"
-            f"No specific home price found in goal. Live 30yr rate: {mortgage_rate:.2f}%.\n"
-            f"Monthly surplus: ${profile.annual_salary / 12 - profile.monthly_expenses:,.0f}"
-        )
-
-    insight = await call_llm(_INSIGHT_SYSTEM, user_prompt, Insight, temperature=0.3)
-    return report.model_copy(update={"summary": insight.summary})
+        summary = report.summary
+    return report.model_copy(update={"summary": summary})
