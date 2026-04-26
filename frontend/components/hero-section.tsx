@@ -441,6 +441,10 @@ export function HeroSection() {
         <h1 className="text-foreground text-3xl md:text-4xl lg:text-6xl font-semibold leading-tight">
           Your Autonomous Wealth Management Firm
         </h1>
+        <div className="mx-auto flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-xs md:text-sm text-muted-foreground backdrop-blur">
+          <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_16px_hsl(var(--primary))]" />
+          <span>One strategy line. Twelve agents. Zero noise.</span>
+        </div>
         <p className="text-muted-foreground text-base md:text-base lg:text-lg font-medium leading-relaxed max-w-lg mx-auto">
           12 specialized AI agents debate, allocate, and govern your financial future. Watch your personal wealth firm come to life.
         </p>
@@ -451,6 +455,12 @@ export function HeroSection() {
           Build My Plan
         </Button>
       </Link>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-[-140px] z-0 hidden h-[280px] md:block">
+        <div className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/20" />
+        <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/10" />
+        <div className="absolute left-1/2 top-1/2 h-44 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-3xl" />
+      </div>
     </section>
   )
 }
