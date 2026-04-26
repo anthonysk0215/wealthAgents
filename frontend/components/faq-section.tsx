@@ -21,11 +21,6 @@ const faqData = [
       "Absolutely! Transparency is core to WealthAgents. You can watch each agent's reasoning in real-time through our live agent trace. Every card is clickable to reveal the full analysis, confidence scores, and reasoning. The complete transcript is always available so you understand exactly why your plan looks the way it does.",
   },
   {
-    question: "What's included in the free Starter plan?",
-    answer:
-      "The Starter plan gives you access to the full 12-agent financial analysis, live agent trace visualization, basic allocation recommendations, and one wealth plan generation. It's perfect for experiencing how AI-powered wealth planning works before committing to a paid plan.",
-  },
-  {
     question: "How does the 'What-If' scenario analysis work?",
     answer:
       "With our Investor plan, you can modify key inputs and re-run the entire agent pipeline. Try scenarios like 'What if my salary drops 30%?' or 'What if I delay buying a house by 3 years?' The system shows a side-by-side comparison of how the Bull/Bear debate shifts, how risk calibration changes, and how your allocation adapts.",

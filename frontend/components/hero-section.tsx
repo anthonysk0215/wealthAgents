@@ -6,8 +6,7 @@ import Link from "next/link"
 export function HeroSection() {
   return (
     <section
-      className="flex flex-col items-center text-center relative mx-auto rounded-2xl overflow-hidden my-6 py-0 px-4
-         w-full h-[400px] md:w-[1220px] md:h-[600px] lg:h-[810px] md:px-0"
+      className="flex flex-col items-center justify-center text-center relative w-full min-h-screen overflow-hidden py-0 px-4"
     >
       {/* SVG Background */}
       <div className="absolute inset-0 z-0">
@@ -298,20 +297,11 @@ export function HeroSection() {
               <path
                 d="M65.625 750.269H284.007C860.205 750.269 1327.31 283.168 1327.31 -293.03H1650V1104.85H65.625V750.269Z"
                 fill="url(#paint4_radial_186_1134)"
-                fillOpacity="0.64"
+                fillOpacity="0.95"
               />
             </g>
           </g>
 
-          <rect
-            x="0.5"
-            y="0.5"
-            width="1219"
-            height="809"
-            rx="15.5"
-            stroke="hsl(var(--foreground))"
-            strokeOpacity="0.06"
-          />
 
           <defs>
             <filter
@@ -437,29 +427,29 @@ export function HeroSection() {
         <Header />
       </div>
 
-      <div className="relative z-10 space-y-4 md:space-y-5 lg:space-y-6 mb-6 md:mb-7 lg:mb-9 max-w-md md:max-w-[600px] lg:max-w-[700px] mt-16 md:mt-[120px] lg:mt-[160px] px-4">
-        <h1 className="text-foreground text-3xl md:text-4xl lg:text-6xl font-semibold leading-tight">
+      <div className="relative z-10 flex flex-col items-center gap-5 md:gap-6 max-w-lg md:max-w-[760px] lg:max-w-[900px] px-4">
+        <h1 className="text-foreground text-5xl md:text-6xl lg:text-7xl font-semibold leading-tight">
           Your Autonomous Wealth Management Firm
         </h1>
-        <div className="mx-auto flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-xs md:text-sm text-muted-foreground backdrop-blur">
+        <div className="mx-auto flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-muted-foreground backdrop-blur">
           <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_16px_hsl(var(--primary))]" />
           <span>One strategy line. Twelve agents. Zero noise.</span>
         </div>
-        <p className="text-muted-foreground text-base md:text-base lg:text-lg font-medium leading-relaxed max-w-lg mx-auto">
+        <p className="text-muted-foreground text-lg md:text-xl font-medium leading-relaxed max-w-xl mx-auto">
           12 specialized AI agents debate, allocate, and govern your financial future. Watch your personal wealth firm come to life.
         </p>
+        <Link href="#intake-section">
+          <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-10 py-3 rounded-full font-medium text-base shadow-lg ring-1 ring-white/10">
+            Build My Plan
+          </Button>
+        </Link>
       </div>
 
-      <Link href="#intake-section">
-        <Button className="relative z-10 bg-secondary text-secondary-foreground hover:bg-secondary/90 px-8 py-3 rounded-full font-medium text-base shadow-lg ring-1 ring-white/10">
-          Build My Plan
-        </Button>
-      </Link>
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-[-140px] z-0 hidden h-[280px] md:block">
-        <div className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/20" />
-        <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/10" />
-        <div className="absolute left-1/2 top-1/2 h-44 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-[-140px] z-0 hidden h-[380px] md:block">
+        <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/30" />
+        <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/15" />
+        <div className="absolute left-1/2 top-1/2 h-72 w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25 blur-3xl" />
+        <div className="absolute left-1/2 top-1/2 h-48 w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-2xl" />
       </div>
     </section>
   )
