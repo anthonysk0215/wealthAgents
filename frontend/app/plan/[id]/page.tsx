@@ -75,6 +75,13 @@ interface WealthPlan {
   plan_insights?: PlanInsights
 }
 
+interface StockIdea {
+  ticker: string
+  allocation_pct: number
+  rationale: string
+  trend_signal: string
+}
+
 interface AgentEvent {
   stage: string
   payload: Record<string, unknown>
@@ -132,23 +139,23 @@ function summarizeText(text: string, maxLen = 150): string {
 }
 
 function extractMessage(stage: string, p: Record<string, unknown>): string {
-  if (stage === "layer1_start")        return String(p.message ?? "Starting analysis pipeline...")
+  if (stage === "layer1_start")        return summarizeText(String(p.message ?? "Starting analysis pipeline..."), 85)
   if (stage === "market_data")         return `Mortgage rate: ${p.mortgage_rate_30yr ?? "—"}% · 10yr Treasury: ${p.treasury_10yr ?? "—"}% · CPI YoY: ${p.cpi_yoy ?? "—"}%`
-  if (stage === "cash_flow")           return String(p.summary ?? "")
-  if (stage === "retirement")          return String(p.summary ?? "")
-  if (stage === "housing")             return String(p.summary ?? "")
-  if (stage === "investments")         return String(p.summary ?? "")
+  if (stage === "cash_flow")           return summarizeText(String(p.summary ?? ""), 95)
+  if (stage === "retirement")          return summarizeText(String(p.summary ?? ""), 95)
+  if (stage === "housing")             return summarizeText(String(p.summary ?? ""), 95)
+  if (stage === "investments")         return summarizeText(String(p.summary ?? ""), 100)
   if (stage.startsWith("bull_round_") || stage.startsWith("bear_round_")) {
     const conf = p.confidence ? ` (confidence: ${Math.round(Number(p.confidence) * 100)}%)` : ""
     return summarizeText(String(p.argument ?? ""), 90) + conf
   }
   if (stage === "debate_verdict")      return summarizeText(String(p.summary ?? ""), 100)
-  if (stage === "allocation_proposed") return String(p.summary ?? "")
+  if (stage === "allocation_proposed") return summarizeText(String(p.summary ?? ""), 95)
   if (stage === "risk_aggressive" || stage === "risk_neutral" || stage === "risk_conservative") {
-    return String(p.reasoning ?? "")
+    return summarizeText(String(p.reasoning ?? ""), 95)
   }
-  if (stage === "risk_final")          return String(p.summary ?? "")
-  if (stage === "wealth_plan")         return String(p.headline ?? "Wealth plan complete.")
+  if (stage === "risk_final")          return summarizeText(String(p.summary ?? ""), 95)
+  if (stage === "wealth_plan")         return summarizeText(String(p.headline ?? "Wealth plan complete."), 90)
   return ""
 }
 
@@ -331,6 +338,7 @@ export default function PlanPage() {
   const [showDebateTranscript, setShowDebateTranscript] = useState(false)
   const [showTwelveMonthRoadmap, setShowTwelveMonthRoadmap] = useState(false)
   const [showFiveYearVision, setShowFiveYearVision] = useState(false)
+  const [showAllocationReasoning, setShowAllocationReasoning] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -623,6 +631,9 @@ export default function PlanPage() {
   const etfs        = (invEvent.recommended_etfs as string[]) ?? ["VTI","VXUS","BND"]
   const equityPct   = (invEvent.equity_pct as number) ?? 70
   const bondPct     = (invEvent.bond_pct as number) ?? 30
+  const etfIndexSplitPct = (invEvent.etf_index_funds_pct as number) ?? 100
+  const stockSplitPct    = (invEvent.individual_stocks_pct as number) ?? 0
+  const stockIdeas       = (invEvent.individual_stock_ideas as StockIdea[]) ?? []
   const investAmt    = alloc.monthly_amounts["investing"] ?? 0
   const houseFundAmt = alloc.monthly_amounts["house_fund"] ?? 0
   const specAmt      = alloc.monthly_amounts["speculative"] ?? 0
@@ -709,7 +720,7 @@ export default function PlanPage() {
             <p className="text-xs font-medium text-primary uppercase tracking-widest mb-1">Financial Health Score</p>
             <h1 className="text-xl md:text-2xl font-semibold text-foreground leading-snug">{plan.headline}</h1>
             {profile && (
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-sm text-muted-foreground mt-2">
                 {profile.name} · {profile.age}yo {profile.occupation} · ${profile.annual_salary.toLocaleString()}/yr
               </p>
             )}
@@ -734,7 +745,7 @@ export default function PlanPage() {
               <h2 className="font-semibold text-foreground">Risk Warnings</h2>
             </div>
             {warnings.map((w, i) => (
-              <p key={i} className="text-sm text-foreground/80 flex gap-2">
+              <p key={i} className="text-base text-foreground/80 flex gap-2">
                 <span className="text-amber-500 shrink-0">•</span> {w}
               </p>
             ))}
@@ -769,7 +780,7 @@ export default function PlanPage() {
                     return (
                       <div key={`done-debate-${i}`} className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
                         <p className="text-xs font-semibold text-primary mb-1">Facilitator Verdict</p>
-                        <p className="text-sm text-foreground/90 leading-relaxed">
+                      <p className="text-base text-foreground/90 leading-relaxed">
                         {summarizeText(String(ev.payload.summary ?? extractMessage(ev.stage, ev.payload)), 110)}
                         </p>
                       </div>
@@ -795,7 +806,7 @@ export default function PlanPage() {
                         </p>
                         {confidence && <span className="text-[11px] text-muted-foreground">{confidence}</span>}
                       </div>
-                      <p className="text-sm text-foreground/90 leading-relaxed">
+                      <p className="text-base text-foreground/90 leading-relaxed">
                         {summarizeText(String(ev.payload.argument ?? extractMessage(ev.stage, ev.payload)), 110)}
                       </p>
                     </div>
@@ -830,11 +841,11 @@ export default function PlanPage() {
                 return (
                   <div key={key}>
                     <div className="flex items-center justify-between gap-3 mb-1.5">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground whitespace-nowrap shrink-0">
+                      <div className="flex items-center gap-2 text-base font-medium text-foreground whitespace-nowrap shrink-0">
                         <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
                         {label}
                       </div>
-                      <div className="text-sm whitespace-nowrap shrink-0 text-right">
+                      <div className="text-base whitespace-nowrap shrink-0 text-right">
                         <span className="font-semibold text-foreground">{pct.toFixed(1)}%</span>
                         <span className="text-muted-foreground"> · <span className="text-foreground font-medium">${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>/mo</span>
                       </div>
@@ -849,8 +860,22 @@ export default function PlanPage() {
           </div>
           {/* Agent reasoning — debate insights + allocation + risk */}
           {(bullWinsOn.length > 0 || bearWinsOn.length > 0 || aggressionDial !== null || allocSummary || riskSummary || verdictSummary) && (
-          <div className="pt-3 border-t border-border/50 space-y-3">
+          <div className="pt-3 border-t border-border/50">
+            <button
+              type="button"
+              onClick={() => setShowAllocationReasoning((v) => !v)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <h3 className="text-base font-semibold text-foreground">Allocation Reasoning</h3>
+              {showAllocationReasoning ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
 
+            {showAllocationReasoning && (
+            <div className="space-y-3 mt-4">
             {/* Debate bull/bear breakdown */}
             {(bullWinsOn.length > 0 || bearWinsOn.length > 0 || aggressionDial !== null) && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -859,7 +884,7 @@ export default function PlanPage() {
                     <div className="text-[10px] font-semibold text-green-400 uppercase tracking-wide mb-2">Bull agent won on</div>
                     <ul className="space-y-1">
                       {bullWinsOn.map((pt, i) => (
-                        <li key={i} className="text-xs text-foreground/80 flex gap-1.5"><span className="text-green-400 shrink-0">+</span>{pt}</li>
+                        <li key={i} className="text-sm text-foreground/80 flex gap-1.5"><span className="text-green-400 shrink-0">+</span>{pt}</li>
                       ))}
                     </ul>
                   </div>
@@ -869,7 +894,7 @@ export default function PlanPage() {
                     <div className="text-[10px] font-semibold text-red-400 uppercase tracking-wide mb-2">Bear agent won on</div>
                     <ul className="space-y-1">
                       {bearWinsOn.map((pt, i) => (
-                        <li key={i} className="text-xs text-foreground/80 flex gap-1.5"><span className="text-red-400 shrink-0">−</span>{pt}</li>
+                        <li key={i} className="text-sm text-foreground/80 flex gap-1.5"><span className="text-red-400 shrink-0">−</span>{pt}</li>
                       ))}
                     </ul>
                   </div>
@@ -913,13 +938,13 @@ export default function PlanPage() {
               {allocSummary && (
                 <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3">
                   <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide mb-1">Allocator reasoning</div>
-                  <p className="text-xs text-foreground/80">{allocSummary}</p>
+                  <p className="text-sm text-foreground/80">{allocSummary}</p>
                 </div>
               )}
               {riskSummary && (
                 <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-3">
                   <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wide mb-1">Risk manager decision</div>
-                  <p className="text-xs text-foreground/80">{riskSummary}</p>
+                  <p className="text-sm text-foreground/80">{riskSummary}</p>
                 </div>
               )}
             </div>
@@ -928,8 +953,10 @@ export default function PlanPage() {
             {verdictSummary && (
               <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
                 <div className="text-[10px] font-semibold text-primary uppercase tracking-wide mb-1">Facilitator final verdict</div>
-                <p className="text-xs text-foreground/80">{verdictSummary}</p>
+                <p className="text-sm text-foreground/80">{verdictSummary}</p>
               </div>
+            )}
+            </div>
             )}
           </div>
           )}
@@ -941,7 +968,7 @@ export default function PlanPage() {
 
           {/* Retirement sub-breakdown */}
           <div>
-            <h3 className="text-sm font-medium text-violet-400 flex items-center gap-2 mb-2">
+            <h3 className="text-base font-medium text-violet-400 flex items-center gap-2 mb-2">
               <Briefcase className="w-4 h-4" /> Retirement — ${retirAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -972,7 +999,7 @@ export default function PlanPage() {
 
           {/* Investing sub-breakdown */}
           <div>
-            <h3 className="text-sm font-medium text-emerald-400 flex items-center gap-2 mb-2">
+            <h3 className="text-base font-medium text-emerald-400 flex items-center gap-2 mb-2">
               <TrendingUp className="w-4 h-4" /> Taxable Investing — ${investAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -981,11 +1008,11 @@ export default function PlanPage() {
                 return (
                   <div key={ticker} className="bg-muted/30 rounded-xl p-4 border border-emerald-500/20">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold text-emerald-400">{ticker}</span>
+                      <span className="text-base font-bold text-emerald-400">{ticker}</span>
                       <span className="text-xs text-muted-foreground">Equity</span>
                     </div>
                     <div className="text-xl font-bold text-foreground">${share.toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
-                    <div className="text-xs text-muted-foreground mt-1">
+                    <div className="text-sm text-muted-foreground mt-1">
                       {ticker === "VTI" && "US total market"}
                       {ticker === "VXUS" && "International ex-US"}
                       {ticker === "QQQ" && "Nasdaq 100 tech growth"}
@@ -998,23 +1025,51 @@ export default function PlanPage() {
               {bondETFs.map(ticker => (
                 <div key={ticker} className="bg-muted/30 rounded-xl p-4 border border-sky-500/20">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-sky-400">{ticker}</span>
+                    <span className="text-base font-bold text-sky-400">{ticker}</span>
                     <span className="text-xs text-muted-foreground">Bonds</span>
                   </div>
                   <div className="text-xl font-bold text-foreground">${bondAmt.toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-sm text-muted-foreground mt-1">
                     {ticker === "BND" ? "US total bond market" : "Dividend / income ETF"}
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-3">Use Fidelity, Schwab, or Vanguard — set auto-invest on payday.</p>
+            <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-sm text-emerald-300/90">
+                ETF/index vs individual stock split: <span className="font-semibold text-emerald-300">{etfIndexSplitPct.toFixed(0)}% / {stockSplitPct.toFixed(0)}%</span>
+              </p>
+            </div>
+
+            {stockIdeas.length > 0 && (
+              <div className="mt-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-emerald-300 mb-2">Individual Stock Picks</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {stockIdeas.map((idea) => (
+                    <div key={idea.ticker} className="bg-muted/30 rounded-xl p-4 border border-emerald-500/20">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-emerald-400">{idea.ticker}</span>
+                        <span className="text-[11px] text-muted-foreground">{idea.allocation_pct.toFixed(1)}%</span>
+                      </div>
+                      <p className="text-sm text-foreground/85 leading-relaxed">
+                        {summarizeText(idea.rationale, 95)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Trend: {summarizeText(idea.trend_signal, 75)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground mt-3">Use Fidelity, Schwab, or Vanguard — set auto-invest on payday.</p>
           </div>
 
           {/* House Fund sub-breakdown */}
           {houseFundAmt > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-amber-400 flex items-center gap-2 mb-2">
+            <h3 className="text-base font-medium text-amber-400 flex items-center gap-2 mb-2">
                 <Home className="w-4 h-4" /> House Fund — ${houseFundAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1062,19 +1117,19 @@ export default function PlanPage() {
                 ]
             return (
               <div>
-                <h3 className="text-sm font-medium text-rose-400 flex items-center gap-2 mb-2">
+            <h3 className="text-base font-medium text-rose-400 flex items-center gap-2 mb-2">
                   <Zap className="w-4 h-4" /> Speculative — ${specAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {specItems.map(({ ticker, label, pct }) => (
                     <div key={ticker} className="bg-muted/30 rounded-xl p-4 border border-rose-500/20">
-                      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+                      <div className="text-sm text-muted-foreground mb-1">{label}</div>
                       <div className="text-base font-bold text-foreground">${Math.round(specAmt * pct).toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-xs font-normal text-muted-foreground">/mo</span></div>
                       <div className="text-xs font-semibold text-rose-400 mt-1">{ticker}</div>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   {isConservative ? "Conservative speculative play — high-quality growth ETFs with no individual stock risk."
                    : isAggressive ? "High-risk bucket — only invest what you can lose 100% of. Dollar-cost average monthly, don’t chase pumps."
                    : "Moderate speculative bucket — growth ETFs only. Avoid YOLO trades. Max 1-3 individual stocks if any."}
@@ -1093,30 +1148,30 @@ export default function PlanPage() {
             if (!cf && !ret && !hou && !inv) return null
             return (
               <div className="pt-4 border-t border-border/50">
-                <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-3">Analyst Reports</h3>
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Analyst Reports</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {cf && (
                     <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
                       <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wide mb-1.5">Cash Flow Analyst</div>
-                      <p className="text-xs text-foreground/80 leading-relaxed">{cf}</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{cf}</p>
                     </div>
                   )}
                   {ret && (
                     <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-3">
                       <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-1.5">Retirement Analyst</div>
-                      <p className="text-xs text-foreground/80 leading-relaxed">{ret}</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{ret}</p>
                     </div>
                   )}
                   {hou && (
                     <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
                       <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wide mb-1.5">Housing Analyst</div>
-                      <p className="text-xs text-foreground/80 leading-relaxed">{hou}</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{hou}</p>
                     </div>
                   )}
                   {inv && (
                     <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3">
                       <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1.5">Investment Analyst</div>
-                      <p className="text-xs text-foreground/80 leading-relaxed">{inv}</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{inv}</p>
                     </div>
                   )}
                 </div>
@@ -1130,12 +1185,12 @@ export default function PlanPage() {
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
             <h2 className="font-semibold text-foreground mb-1">Career Trajectory</h2>
             <div className="mb-5 space-y-1">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 <span className="text-foreground font-medium">{(growthRate * 100).toFixed(0)}% annual growth</span>
                 {profile?.occupation && <span> estimated for <span className="text-foreground">{profile.occupation}</span></span>}
                 {profile?.industry && <span> in <span className="text-foreground">{profile.industry}</span></span>}.
               </p>
-              <p className="text-xs text-muted-foreground/70 italic">{growthBasis}.</p>
+              <p className="text-sm text-muted-foreground/70 italic">{growthBasis}.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -1185,7 +1240,7 @@ export default function PlanPage() {
               })}
             </div>
 
-            <p className="text-xs text-muted-foreground mt-4 border-t border-border/40 pt-4">
+            <p className="text-sm text-muted-foreground mt-4 border-t border-border/40 pt-4">
               <span className="text-amber-400 font-medium">Raise rule:</span> When your salary increases, keep expenses flat and redirect the extra take-home — split it 60% investing, 30% retirement, 10% house fund.
             </p>
           </div>
@@ -1194,7 +1249,7 @@ export default function PlanPage() {
         {/* Next $1,000 */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
           <h2 className="font-semibold text-foreground mb-1">Your Next $1,000</h2>
-          <p className="text-xs text-muted-foreground mb-5">Exact split for your next $1,000 of monthly surplus.</p>
+          <p className="text-sm text-muted-foreground mb-5">Exact split for your next $1,000 of monthly surplus.</p>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {NEXT_K.map(({ key, label, color }) => {
               const amt = plan.next_thousand[key as keyof NextThousand]
