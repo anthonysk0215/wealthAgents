@@ -38,10 +38,10 @@ async def run_facilitator(
       uses it as its primary input. Make it precise (2 decimal places).
       summary should read like a one-sentence newspaper verdict.
     """
-    if len(bull_rounds) != 3:
-        raise ValueError(f"bull_rounds must contain exactly 3 rounds (got {len(bull_rounds)})")
-    if len(bear_rounds) != 3:
-        raise ValueError(f"bear_rounds must contain exactly 3 rounds (got {len(bear_rounds)})")
+    if len(bull_rounds) < 1:
+        raise ValueError(f"bull_rounds must contain at least 1 round (got {len(bull_rounds)})")
+    if len(bear_rounds) < 1:
+        raise ValueError(f"bear_rounds must contain at least 1 round (got {len(bear_rounds)})")
 
     if any(r.speaker != "bull" for r in bull_rounds):
         raise ValueError("All bull_rounds entries must have speaker='bull'")
@@ -65,41 +65,38 @@ async def run_facilitator(
         "- summary: one punchy sentence explaining why this dial is right for this user."
     )
 
-    layer1_context = (
-        f"Layer 1 full reports (market-enriched analyst outputs):\n{layer1.model_dump_json(indent=2)}\n\n"
-        if layer1 is not None
-        else ""
+    layer1_context = ""
+    if layer1 is not None:
+        cf = layer1.cash_flow
+        ret = layer1.retirement
+        hou = layer1.housing
+        inv = layer1.investment
+        layer1_context = (
+            f"Layer 1 key facts: surplus ${cf.monthly_surplus:,.0f}/mo, savings rate {cf.savings_rate:.1f}%, "
+            f"401k {ret.recommended_401k_pct:.0f}%, housing feasible={hou.feasible}, "
+            f"equity/bond {inv.equity_pct:.0f}/{inv.bond_pct:.0f}.\n\n"
+        )
+
+    bull_lines = "\n".join(
+        f"{i+1}) conf={r.confidence:.2f} | {r.argument}"
+        for i, r in enumerate(bull_rounds)
+    )
+    bear_lines = "\n".join(
+        f"{i+1}) conf={r.confidence:.2f} | {r.argument}"
+        for i, r in enumerate(bear_rounds)
     )
 
     user_prompt = (
-        f"User profile:\n"
-        f"- Name: {profile.name}\n"
-        f"- Age: {profile.age}\n"
-        f"- Occupation: {profile.occupation}\n"
-        f"- Industry: {profile.industry}\n"
-        f"- Annual salary: ${profile.annual_salary:,.0f}\n"
-        f"- Monthly expenses: ${profile.monthly_expenses:,.0f}\n"
-        f"- Current savings: ${profile.current_savings:,.0f}\n"
-        f"- Taxable investments: ${profile.taxable_investments:,.0f}\n"
-        f"- Retirement balance: ${profile.retirement_balance:,.0f}\n"
-        f"- Debt: ${profile.debt_amount:,.0f} at {profile.debt_interest_rate:.2f}%\n"
-        f"- Employer 401k match: {profile.employer_401k_match:.1f}%\n"
-        f"- Goal: {profile.primary_goal} (target age {profile.target_age})\n"
-        f"- Risk tolerance: {profile.risk_tolerance}\n\n"
+        f"User: {profile.name}, {profile.age}yo {profile.occupation}, "
+        f"${profile.annual_salary:,.0f}/yr, risk={profile.risk_tolerance}, "
+        f"goal: {profile.primary_goal} by age {profile.target_age}.\n"
+        f"Savings ${profile.current_savings:,.0f}, debt ${profile.debt_amount:,.0f}.\n\n"
         f"{layer1_context}"
-        "Bull rounds:\n"
-        f"1) conf={bull_rounds[0].confidence:.2f} | {bull_rounds[0].argument}\n"
-        f"2) conf={bull_rounds[1].confidence:.2f} | {bull_rounds[1].argument}\n"
-        f"3) conf={bull_rounds[2].confidence:.2f} | {bull_rounds[2].argument}\n\n"
-        "Bear rounds:\n"
-        f"1) conf={bear_rounds[0].confidence:.2f} | {bear_rounds[0].argument}\n"
-        f"2) conf={bear_rounds[1].confidence:.2f} | {bear_rounds[1].argument}\n"
-        f"3) conf={bear_rounds[2].confidence:.2f} | {bear_rounds[2].argument}\n\n"
+        f"Bull rounds:\n{bull_lines}\n\n"
+        f"Bear rounds:\n{bear_lines}\n\n"
         "Decision policy:\n"
         "- Reward compounding and opportunity capture when downside is survivable.\n"
         "- Penalize plans that create liquidity fragility, especially with low emergency runway.\n"
-        "- Prefer recommendations that are executable from current cash flow, not aspirational.\n"
-        "- If Layer 1 reports are provided, weight those facts heavily when assigning topic winners.\n"
         "- aggression_dial should be higher only if bull arguments are materially stronger on most topics."
     )
 

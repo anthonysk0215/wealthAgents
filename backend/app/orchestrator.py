@@ -17,7 +17,11 @@ onto the asyncio.Queue that the SSE stream drains.
 from __future__ import annotations
 
 import asyncio
+import time
+import logging
 from typing import Any, Callable
+
+log = logging.getLogger("wealthagents.orchestrator")
 
 from app.schemas import (
     Layer1Reports,
@@ -53,14 +57,22 @@ async def run_pipeline(
     SSE stream a real-time view of agent progress.
     """
     transcript: list[dict] = []
+    t0 = time.monotonic()
+
+    def elapsed() -> str:
+        return f"{time.monotonic() - t0:.1f}s"
 
     def fire(stage: str, payload: Any) -> None:
         data = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload)
         on_event(stage, data)
         transcript.append({"stage": stage, "payload": data})
+        log.info("[%s] fired ✓  (elapsed %s)", stage, elapsed())
 
     # ── LAYER 1 — fetch live market data, then run 4 analysts in parallel ──────
+    log.info("[layer1_start] starting pipeline")
     fire("layer1_start", {"message": "Fetching live market data..."})
+
+    log.info("[market_data] fetching FRED + yfinance...")
     market = await get_all_market_data()
     fire("market_data", {
         "mortgage_rate_30yr": market["mortgage_rate_30yr"],
@@ -68,6 +80,7 @@ async def run_pipeline(
         "cpi_yoy": market["cpi_yoy"],
     })
 
+    log.info("[layer1] running 4 analysts in parallel...")
     cf, ret, hou, inv = await asyncio.gather(
         run_cash_flow_agent(profile, market),
         run_retirement_agent(profile, market),
@@ -82,11 +95,12 @@ async def run_pipeline(
     fire("housing",     hou)
     fire("investments", inv)
 
-    # ── LAYER 2 — 3-round sequential bull / bear debate ───────────────────────
+    # ── LAYER 2 — 2-round sequential bull / bear debate ───────────────────────
     bull_rounds: list = []
     bear_rounds: list = []
 
-    for round_number in range(1, 4):
+    for round_number in range(1, 3):
+        log.info("[bull_round_%d] calling LLM...", round_number)
         bull = await run_bull(
             profile=profile,
             layer1=layer1,
@@ -96,6 +110,7 @@ async def run_pipeline(
         bull_rounds.append(bull)
         fire(f"bull_round_{round_number}", bull)
 
+        log.info("[bear_round_%d] calling LLM...", round_number)
         bear = await run_bear(
             profile=profile,
             layer1=layer1,
@@ -105,6 +120,7 @@ async def run_pipeline(
         bear_rounds.append(bear)
         fire(f"bear_round_{round_number}", bear)
 
+    log.info("[facilitator] calling LLM...")
     verdict = await run_facilitator(
         profile=profile,
         bull_rounds=bull_rounds,
@@ -114,6 +130,7 @@ async def run_pipeline(
     fire("debate_verdict", verdict)
 
     # ── LAYER 3 — Portfolio allocator ────────────────────────────────────────
+    log.info("[allocator] calling LLM...")
     allocation = await run_allocator(
         profile=profile,
         layer1=layer1,
@@ -122,6 +139,7 @@ async def run_pipeline(
     fire("allocation_proposed", allocation)
 
     # ── LAYER 4 — 3 risk views in parallel, then risk manager ────────────────
+    log.info("[layer4] running 3 risk agents in parallel...")
     agg, neu, con = await asyncio.gather(
         run_aggressive_risk(profile=profile, allocation=allocation),
         run_neutral_risk(profile=profile, allocation=allocation),
@@ -132,6 +150,7 @@ async def run_pipeline(
     fire("risk_neutral",      neu)
     fire("risk_conservative", con)
 
+    log.info("[risk_manager] calling LLM...")
     risk = await run_risk_manager(
         profile=profile,
         allocation=allocation,
@@ -140,6 +159,7 @@ async def run_pipeline(
     fire("risk_final", risk)
 
     # ── LAYER 5 — Wealth manager final synthesis ─────────────────────────────
+    log.info("[wealth_manager] calling LLM...")
     plan = await run_wealth_manager(
         profile=profile,
         layer1=layer1,

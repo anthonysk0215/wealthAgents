@@ -19,7 +19,7 @@ class UserProfile(BaseModel):
     name: str
     age: int
     occupation: str
-    industry: Literal["Tech", "Finance", "Healthcare", "Government", "Education", "Other"]
+    industry: str
     location: Optional[str] = None
 
     annual_salary: float

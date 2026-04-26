@@ -63,27 +63,17 @@ def run(user: UserProfile, spy_pe: float = 22.0, treasury_10yr: float = 4.3) -> 
 
 async def run_investment_agent(profile: UserProfile, market: dict[str, Any]) -> InvestmentReport:
     """
-    Full agent: allocation math with live valuations + LLM-generated insight.
+    Full agent: allocation math with live valuations + deterministic summary (no LLM call for speed).
     """
     equities = market.get("equities", {})
     spy_pe = (equities.get("SPY") or {}).get("forward_pe") or (equities.get("SPY") or {}).get("trailing_pe") or 22.0
     treasury_10yr = market.get("treasury_10yr", 4.3)
-
     vti_ytd = (equities.get("VTI") or {}).get("ytd_return_pct")
-    vxus_ytd = (equities.get("VXUS") or {}).get("ytd_return_pct")
-    bnd_yield = (equities.get("BND") or {}).get("dividend_yield_pct")
 
     report = run(profile, spy_pe=spy_pe, treasury_10yr=treasury_10yr)
-
-    user_prompt = (
-        f"{profile.name}, {profile.age}yo, risk tolerance: {profile.risk_tolerance}.\n"
-        f"Allocation: {report.equity_pct:.0f}% equity / {report.bond_pct:.0f}% bonds\n"
-        f"ETFs: {', '.join(report.recommended_etfs)}\n"
-        f"Live market: SPY P/E {spy_pe:.1f} | 10yr Treasury {treasury_10yr:.2f}%"
-        + (f" | VTI YTD {vti_ytd:+.1f}%" if vti_ytd is not None else "")
-        + (f" | VXUS YTD {vxus_ytd:+.1f}%" if vxus_ytd is not None else "")
-        + (f" | BND yield {bnd_yield:.2f}%" if bnd_yield else "")
+    ytd_str = f"; VTI YTD {vti_ytd:+.1f}%" if vti_ytd is not None else ""
+    summary = (
+        f"{report.equity_pct:.0f}/{report.bond_pct:.0f} equity/bond via {', '.join(report.recommended_etfs)}"
+        f" (10yr Treasury {treasury_10yr:.2f}%{ytd_str})."
     )
-
-    insight = await call_llm(_INSIGHT_SYSTEM, user_prompt, Insight, temperature=0.3)
-    return report.model_copy(update={"summary": insight.summary})
+    return report.model_copy(update={"summary": summary})

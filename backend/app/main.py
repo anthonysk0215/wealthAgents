@@ -13,10 +13,17 @@ START PRODUCTION (Render/Railway):
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from pathlib import Path
 from typing import Dict, Optional
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -37,14 +44,13 @@ app = FastAPI(title="WealthAgents API")
 # Hour 7: add Vercel preview URL after Person 3 deploys.
 # Hour 9: lock to specific origins. Comma-separated env var supported.
 
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
-).split(",")
+_env_origins = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [o.strip() for o in _env_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,8 +59,11 @@ app.add_middleware(
 # =============================================================
 # In-memory plan store
 # =============================================================
-
-plans: Dict[str, asyncio.Queue] = {}
+# Each plan is a dict with:
+#   events   : list of SSE dicts accumulated so far
+#   done     : True once the pipeline finishes or errors
+#   notify   : asyncio.Event signalled on every new event
+plans: Dict[str, dict] = {}
 
 
 # =============================================================
@@ -79,31 +88,31 @@ async def start_plan(profile: UserProfile):
     the /stream endpoint consumes.
     """
     plan_id = str(uuid.uuid4())
-    queue: asyncio.Queue = asyncio.Queue()
-    plans[plan_id] = queue
+    store: dict = {"events": [], "done": False, "notify": asyncio.Event()}
+    plans[plan_id] = store
 
     async def background():
         def on_event(stage: str, payload):
-            # Orchestrator hands us a dict (already model_dump'd).
-            queue.put_nowait({
+            store["events"].append({
                 "event": stage,
                 "data": json.dumps(payload, default=str),
             })
+            store["notify"].set()
 
         try:
             plan = await run_pipeline(profile, on_event=on_event)
-            queue.put_nowait({
+            store["events"].append({
                 "event": "done",
                 "data": plan.model_dump_json(),
             })
         except Exception as e:
-            queue.put_nowait({
+            store["events"].append({
                 "event": "error",
                 "data": json.dumps({"message": str(e), "type": type(e).__name__}),
             })
         finally:
-            # Sentinel signals the consumer to close the stream.
-            queue.put_nowait(None)
+            store["done"] = True
+            store["notify"].set()
 
     asyncio.create_task(background())
     return {"plan_id": plan_id}
@@ -127,24 +136,33 @@ async def stream_plan(plan_id: str, request: Request, cached: bool = False):
     if plan_id not in plans:
         raise HTTPException(status_code=404, detail="plan_id not found")
 
-    queue = plans[plan_id]
+    store = plans[plan_id]
 
     async def event_gen():
+        cursor = 0
         while True:
             if await request.is_disconnected():
                 break
+
+            events = store["events"]
+            if cursor < len(events):
+                event = events[cursor]
+                cursor += 1
+                yield event
+                if event.get("event") in ("done", "error"):
+                    break
+                continue
+
+            if store["done"]:
+                break
+
+            # Nothing new yet — wait for the pipeline to signal
+            store["notify"].clear()
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=120)
+                await asyncio.wait_for(store["notify"].wait(), timeout=25)
             except asyncio.TimeoutError:
-                # No events for 2 minutes — assume something hung. Close.
-                yield {"event": "error", "data": json.dumps({"message": "stream timeout"})}
-                break
-
-            if event is None:
-                # Sentinel — pipeline finished.
-                break
-
-            yield event
+                yield {"data": ": keepalive"}
+                continue
 
     return EventSourceResponse(event_gen())
 

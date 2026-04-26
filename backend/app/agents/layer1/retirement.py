@@ -83,22 +83,13 @@ def run(user: UserProfile) -> RetirementReport:
 
 async def run_retirement_agent(profile: UserProfile, market: dict[str, Any]) -> RetirementReport:
     """
-    Full agent: retirement math + live treasury context + LLM-generated insight.
+    Full agent: retirement math with deterministic summary (no LLM call for speed).
     """
-    treasury_10yr = market.get("treasury_10yr", 4.3)
     report = run(profile)
-    on_track, benchmark_str = _on_track(profile)
-
-    user_prompt = (
-        f"{profile.name}, {profile.age}yo {profile.occupation}.\n"
-        f"Annual salary: ${profile.annual_salary:,.0f} | Risk tolerance: {profile.risk_tolerance}\n"
-        f"Recommended 401k: {report.recommended_401k_pct:.1f}% (${report.annual_retirement_contribution:,.0f}/yr total)\n"
-        f"Employer match: {profile.employer_401k_match}% | Captures full match: {report.captures_full_match}\n"
-        f"Roth IRA eligible: {report.roth_ira_eligible}\n"
-        f"Retirement balance benchmark: {benchmark_str}\n"
-        f"Current 10yr Treasury yield: {treasury_10yr:.2f}% "
-        f"({'competitive with stocks — bonds worth considering' if treasury_10yr > 4.5 else 'stocks still favoured long-term'})"
+    _, benchmark_str = _on_track(profile)
+    roth = "Roth IRA eligible" if report.roth_ira_eligible else "Roth IRA ineligible (income too high)"
+    summary = (
+        f"Contribute {report.recommended_401k_pct:.0f}% to 401k "
+        f"(${report.annual_retirement_contribution:,.0f}/yr total); {roth}; {benchmark_str}."
     )
-
-    insight = await call_llm(_INSIGHT_SYSTEM, user_prompt, Insight, temperature=0.3)
-    return report.model_copy(update={"summary": insight.summary})
+    return report.model_copy(update={"summary": summary})

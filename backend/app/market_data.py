@@ -87,33 +87,32 @@ async def get_cpi_yoy() -> float:
 # ── yfinance helpers ─────────────────────────────────────────────────────────
 
 def _fetch_equity_sync() -> dict[str, dict]:
-    """Fetch ETF data synchronously (run in executor). Gracefully handles failures."""
+    """Fetch ETF close prices in one batch download — much faster than per-ticker .info."""
     symbols = ["VTI", "VXUS", "BND", "SPY", "QQQ", "SCHD"]
-    results: dict[str, dict] = {}
-
-    for symbol in symbols:
-        try:
-            t = yf.Ticker(symbol)
-            info = t.info or {}
-            hist = t.history(period="1y", auto_adjust=True)
-            ytd_return = None
-            if not hist.empty and len(hist) > 20:
-                ytd_return = round(
-                    (hist["Close"].iloc[-1] - hist["Close"].iloc[0])
-                    / hist["Close"].iloc[0]
-                    * 100,
-                    2,
-                )
-            results[symbol] = {
-                "price": info.get("regularMarketPrice") or info.get("previousClose"),
-                "forward_pe": info.get("forwardPE"),
-                "trailing_pe": info.get("trailingPE"),
-                "dividend_yield_pct": round((info.get("dividendYield") or 0) * 100, 2),
-                "ytd_return_pct": ytd_return,
-            }
-        except Exception:
-            results[symbol] = {}
-
+    results: dict[str, dict] = {s: {} for s in symbols}
+    try:
+        hist = yf.download(
+            symbols,
+            period="1y",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+        closes = hist.get("Close", hist) if hasattr(hist, "get") else hist
+        for symbol in symbols:
+            try:
+                col = closes[symbol] if symbol in closes.columns else closes
+                series = col.dropna()
+                if len(series) > 20:
+                    ytd = round((series.iloc[-1] - series.iloc[0]) / series.iloc[0] * 100, 2)
+                    results[symbol] = {
+                        "price": round(float(series.iloc[-1]), 2),
+                        "ytd_return_pct": ytd,
+                    }
+            except Exception:
+                pass
+    except Exception:
+        pass
     return results
 
 
