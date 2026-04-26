@@ -30,6 +30,26 @@ interface Milestone {
   target_metric?: string
   month?: number
   year?: number
+  action?: string
+  career_note?: string
+}
+
+interface AnalystReports {
+  cash_flow?: string
+  retirement?: string
+  housing?: string
+  investment?: string
+}
+
+interface PlanInsights {
+  bull_wins_on?: string[]
+  bear_wins_on?: string[]
+  aggression_dial?: number | null
+  verdict_summary?: string
+  allocator_summary?: string
+  risk_score?: number | null
+  risk_summary?: string
+  risk_warnings?: string[]
 }
 
 interface WealthPlan {
@@ -39,6 +59,8 @@ interface WealthPlan {
   next_thousand: NextThousand
   milestones_12mo: Milestone[]
   milestones_5yr: Milestone[]
+  analyst_reports?: AnalystReports
+  plan_insights?: PlanInsights
 }
 
 interface AgentEvent {
@@ -128,6 +150,58 @@ function RoundDivider({ round }: { round: number }) {
   )
 }
 
+// ── Occupation-based salary growth rate ──────────────────────────────────────
+
+function getCareerGrowthRate(occupation?: string, industry?: string): { rate: number; basis: string } {
+  const occ = (occupation ?? "").toLowerCase()
+  const ind = (industry ?? "").toLowerCase()
+
+  const OCC_RATES: [string[], number, string][] = [
+    [["software", "developer", "engineer", "programmer", "swe", "full stack", "backend", "frontend"], 0.07, "Software engineers see 6–8%/yr average growth driven by high demand"],
+    [["data scientist", "data analyst", "machine learning", "ml engineer", "ai engineer"], 0.075, "AI/data roles are seeing above-average growth due to market demand"],
+    [["product manager", "product owner", "program manager"], 0.065, "Product managers typically see 5–7%/yr growth"],
+    [["devops", "sre", "cloud", "platform engineer", "infrastructure"], 0.07, "Cloud/DevOps roles command strong salary growth"],
+    [["investment bank", "private equity", "hedge fund", "trader", "quant"], 0.09, "Finance front-office roles see top-quartile compensation growth"],
+    [["financial analyst", "actuary", "fp&a", "controller"], 0.055, "Finance analyst roles average 4–6%/yr growth"],
+    [["doctor", "physician", "surgeon", "md", "psychiatrist", "radiolog"], 0.055, "Physicians see steady 4–6%/yr growth with specialization premium"],
+    [["nurse", "nursing", "rn", "np ", "practitioner"], 0.04, "Nursing salaries grow 3–5%/yr driven by demand and experience"],
+    [["dentist", "dental", "orthodon"], 0.05, "Dental professionals see ~5%/yr growth"],
+    [["pharmacist", "pharmacy"], 0.04, "Pharmacy salaries are stable with 3–4%/yr growth"],
+    [["lawyer", "attorney", "counsel", "paralegal", "solicitor"], 0.065, "Legal professionals average 5–7%/yr with partner-track premium"],
+    [["consultant", "consulting", "advisory", "strategy"], 0.07, "Consultants see strong 6–8%/yr growth with promotions"],
+    [["marketing", "growth marketer", "brand manager", "digital marketing"], 0.05, "Marketing roles average 4–6%/yr growth"],
+    [["sales", "account executive", "business development", "ae ", "bdr", "sdr"], 0.055, "Sales roles vary; base grows 4–6%/yr plus comp upside"],
+    [["teacher", "teaching", "educator", "instructor"], 0.025, "Teacher salaries grow slowly at ~2–3%/yr"],
+    [["professor", "academic", "researcher", "postdoc"], 0.03, "Academic salaries grow modestly at ~2–4%/yr"],
+    [["manager", "director", "vp ", "vice president", "c-suite", "cto", "cfo", "ceo"], 0.065, "Leadership roles see strong 6–7%/yr growth with equity"],
+    [["analyst"], 0.05, "Analyst roles average ~5%/yr growth"],
+  ]
+
+  for (const [keywords, rate, basis] of OCC_RATES) {
+    if (keywords.some(k => occ.includes(k))) return { rate, basis }
+  }
+
+  const IND_RATES: [string[], number, string][] = [
+    [["tech", "software", "saas", "ai", "crypto", "startup"], 0.07, "Tech industry averages 6–8%/yr salary growth"],
+    [["finance", "banking", "insurance", "investment", "fintech"], 0.06, "Finance industry averages 5–7%/yr growth"],
+    [["healthcare", "medical", "pharma", "biotech", "hospital"], 0.045, "Healthcare averages 3–5%/yr growth"],
+    [["legal", "law firm"], 0.06, "Legal sector averages 5–6%/yr growth"],
+    [["consulting", "professional services"], 0.065, "Consulting averages 6–7%/yr with promotions"],
+    [["real estate", "construction", "architecture"], 0.05, "Real estate sector averages 4–5%/yr growth"],
+    [["education", "university", "school"], 0.025, "Education sector averages 2–3%/yr growth"],
+    [["retail", "food", "hospitality", "restaurant"], 0.03, "Retail/hospitality averages 2–4%/yr growth"],
+    [["government", "public sector", "federal", "state", "nonprofit"], 0.025, "Public sector averages 2–3%/yr; strong benefits offset"],
+    [["manufacturing", "logistics", "supply chain", "automotive"], 0.035, "Manufacturing averages 3–4%/yr growth"],
+    [["media", "entertainment", "advertising"], 0.04, "Media/entertainment averages 3–5%/yr growth"],
+  ]
+
+  for (const [keywords, rate, basis] of IND_RATES) {
+    if (keywords.some(k => ind.includes(k))) return { rate, basis }
+  }
+
+  return { rate: 0.04, basis: "Average US salary growth is ~3–5%/yr" }
+}
+
 // ── Bucket display config ─────────────────────────────────────────────────────
 
 const BUCKETS = [
@@ -150,17 +224,26 @@ const NEXT_K = [
 
 interface PieSlice { pct: number; color: string; label: string }
 
-function PieChart({ slices }: { slices: PieSlice[] }) {
-  const cx = 80; const cy = 80; const r = 70
+function PieChart({ slices, size = 160 }: { slices: PieSlice[]; size?: number }) {
+  const cx = size / 2
+  const cy = size / 2
+  const r  = size / 2 - 8
+
+  // Normalize to exactly 100% — eliminates floating-point gaps
+  const rawTotal = slices.reduce((s, p) => s + Math.max(0, p.pct), 0)
+  const scale    = rawTotal > 0 ? 100 / rawTotal : 1
+
   let startAngle = -Math.PI / 2
   const paths: React.ReactElement[] = []
+
   slices.forEach((s, i) => {
     if (s.pct <= 0) return
-    const angle = (s.pct / 100) * 2 * Math.PI
-    const end = startAngle + angle
-    const x1 = cx + r * Math.cos(startAngle); const y1 = cy + r * Math.sin(startAngle)
-    const x2 = cx + r * Math.cos(end);         const y2 = cy + r * Math.sin(end)
+    const angle = ((s.pct * scale) / 100) * 2 * Math.PI
+    const end   = startAngle + angle
     const large = angle > Math.PI ? 1 : 0
+    const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle)
+    const x2 = cx + r * Math.cos(end),         y2 = cy + r * Math.sin(end)
+
     paths.push(
       <path key={i}
         d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
@@ -169,16 +252,30 @@ function PieChart({ slices }: { slices: PieSlice[] }) {
     )
     startAngle = end
   })
+
+  // Largest-remainder method: displayed tenths always sum to exactly 1000 (= 100.0%)
+  const scaledTenths = slices.map(s => s.pct > 0 ? s.pct * scale * 10 : 0)
+  const floored      = scaledTenths.map(v => Math.floor(v))
+  const extra        = 1000 - floored.reduce((a, b) => a + b, 0)
+  const displayTenths = [...floored]
+  scaledTenths
+    .map((v, i) => ({ i, frac: v - floored[i] }))
+    .sort((a, b) => b.frac - a.frac)
+    .slice(0, extra)
+    .forEach(({ i }) => displayTenths[i]++)
+
   return (
     <div className="flex flex-col items-center gap-4">
-      <svg width="160" height="160" viewBox="0 0 160 160">{paths}</svg>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {paths}
+      </svg>
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
-        {slices.filter(s => s.pct > 0).map((s, i) => (
+        {slices.map((s, i) => s.pct > 0 ? (
           <div key={i} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
-            <span className="text-xs text-muted-foreground">{s.label} {s.pct.toFixed(1)}%</span>
+            <span className="text-xs text-muted-foreground">{s.label} {(displayTenths[i] / 10).toFixed(1)}%</span>
           </div>
-        ))}
+        ) : null)}
       </div>
     </div>
   )
@@ -453,10 +550,30 @@ export default function PlanPage() {
   if (!plan) return null
   const alloc = plan.final_allocation
 
-  // Extract Layer 1 data from events for specific portfolio breakdown
-  const retEvent = events.find(e => e.stage === "retirement")?.payload ?? {}
-  const invEvent  = events.find(e => e.stage === "investments")?.payload ?? {}
-  const cfEvent   = events.find(e => e.stage === "cash_flow")?.payload ?? {}
+  // Extract agent event payloads
+  const retEvent    = events.find(e => e.stage === "retirement")?.payload ?? {}
+  const invEvent    = events.find(e => e.stage === "investments")?.payload ?? {}
+  const cfEvent     = events.find(e => e.stage === "cash_flow")?.payload ?? {}
+  const houEvent    = events.find(e => e.stage === "housing")?.payload ?? {}
+  const verdictEvt  = events.find(e => e.stage === "debate_verdict")?.payload ?? {}
+  const allocEvt    = events.find(e => e.stage === "allocation_proposed")?.payload ?? {}
+  const riskEvt     = events.find(e => e.stage === "risk_final")?.payload ?? {}
+
+  // All debate/risk/summary data — read from plan.plan_insights (guaranteed in done payload)
+  // Fall back to event-derived values for older cached plans
+  const pi = plan.plan_insights
+  const bullWinsOn     = pi?.bull_wins_on   ?? (Array.isArray(verdictEvt.bull_wins_on)  ? verdictEvt.bull_wins_on  as string[] : [])
+  const bearWinsOn     = pi?.bear_wins_on   ?? (Array.isArray(verdictEvt.bear_wins_on)  ? verdictEvt.bear_wins_on  as string[] : [])
+  const aggressionDial = pi?.aggression_dial  !== undefined ? pi.aggression_dial : (typeof verdictEvt.aggression_dial === "number" ? verdictEvt.aggression_dial as number : null)
+  const riskScore      = pi?.risk_score       !== undefined ? pi.risk_score      : (typeof riskEvt.risk_score     === "number" ? riskEvt.risk_score     as number : null)
+  const riskWarnings   = pi?.risk_warnings  ?? (Array.isArray(riskEvt.warnings)         ? riskEvt.warnings         as string[] : [])
+  const verdictSummary = pi?.verdict_summary   || (verdictEvt.summary ? String(verdictEvt.summary) : null)
+  const allocSummary   = pi?.allocator_summary || (allocEvt.summary   ? String(allocEvt.summary)   : null)
+  const riskSummary    = pi?.risk_summary      || (riskEvt.summary    ? String(riskEvt.summary)    : null)
+  const cfSummary      = (cfEvent.summary    ? String(cfEvent.summary)    : null)
+  const retSummary     = (retEvent.summary   ? String(retEvent.summary)   : null)
+  const houSummary     = (houEvent.summary   ? String(houEvent.summary)   : null)
+  const invSummary     = (invEvent.summary   ? String(invEvent.summary)   : null)
 
   const salary      = profile?.annual_salary ?? 0
   const match       = profile?.employer_401k_match ?? 0
@@ -467,7 +584,9 @@ export default function PlanPage() {
   const etfs        = (invEvent.recommended_etfs as string[]) ?? ["VTI","VXUS","BND"]
   const equityPct   = (invEvent.equity_pct as number) ?? 70
   const bondPct     = (invEvent.bond_pct as number) ?? 30
-  const investAmt   = alloc.monthly_amounts["investing"] ?? 0
+  const investAmt    = alloc.monthly_amounts["investing"] ?? 0
+  const houseFundAmt = alloc.monthly_amounts["house_fund"] ?? 0
+  const specAmt      = alloc.monthly_amounts["speculative"] ?? 0
 
   // 401k vs Roth split: up to 401k limit first (match capture), rest to Roth if eligible
   const monthly401k    = Math.min(retirAmt, salary * rec401kPct / 100 / 12)
@@ -480,14 +599,19 @@ export default function PlanPage() {
   const bondETFs   = etfs.filter(t => t === "BND" || t === "SCHD")
   const equityETFs = etfs.filter(t => t !== "BND" && t !== "SCHD")
 
-  // Career trajectory — typical annual salary growth by risk tolerance / industry
-  const growthRate = { conservative: 0.03, moderate: 0.04, moderate_aggressive: 0.05, aggressive: 0.06 }[profile?.risk_tolerance ?? "moderate"] ?? 0.04
+  // Career trajectory
+  // Use plan monthly_amounts sum as effective surplus (always reliable since 100% surplus is allocated)
+  const totalAllocated = Object.values(alloc.monthly_amounts as Record<string, number>).reduce((s, v) => s + v, 0)
+  const effectiveSurplus = surplus > 0 ? surplus : totalAllocated
+  const { rate: growthRate, basis: growthBasis } = getCareerGrowthRate(profile?.occupation, profile?.industry)
   const careerYears = [0, 1, 2, 3, 5]
   const careerData = careerYears.map(yr => {
-    const projSalary  = salary * Math.pow(1 + growthRate, yr)
-    const projSurplus = surplus * Math.pow(1 + growthRate, yr)
-    const projInvest  = projSurplus * (alloc.investing_pct / 100)
-    return { yr, salary: projSalary, surplus: projSurplus, invest: projInvest }
+    const mult         = Math.pow(1 + growthRate, yr)
+    const projSalary   = salary * mult
+    const projSurplus  = effectiveSurplus * mult
+    const projInvest   = investAmt * mult
+    const projRetire   = retirAmt * mult
+    return { yr, salary: projSalary, surplus: projSurplus, invest: projInvest, retire: projRetire }
   })
   const pieSlices: PieSlice[] = [
     { pct: alloc.cash_emergency_pct, color: "#3b82f6", label: "Emergency" },
@@ -582,27 +706,37 @@ export default function PlanPage() {
           </div>
         )}
 
-        {/* Allocation — pie chart + breakdown side by side */}
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-foreground mb-5">Monthly Allocation</h2>
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            <div className="shrink-0 mx-auto md:mx-0">
-              <PieChart slices={pieSlices} />
-            </div>
-            <div className="flex-1 space-y-4 w-full">
-              {BUCKETS.map(({ key, amountKey, label, icon: Icon, color }) => {
-                const pct = alloc[key as keyof AllocationPlan] as number
+        {/* Allocation — centered big pie + rows below */}
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5">
+          <h2 className="font-semibold text-foreground">Monthly Allocation</h2>
+          <div className="flex justify-center">
+            <PieChart slices={pieSlices} size={220} />
+          </div>
+          <div className="space-y-3">
+            {(() => {
+              const rawBucketTotal = BUCKETS.reduce((s, { key }) => s + Math.max(0, alloc[key as keyof AllocationPlan] as number), 0)
+              const bScale = rawBucketTotal > 0 ? 100 / rawBucketTotal : 1
+              const bRaw     = BUCKETS.map(({ key }) => Math.max(0, alloc[key as keyof AllocationPlan] as number) * bScale * 10)
+              const bFloor   = bRaw.map(v => Math.floor(v))
+              const bExtra   = 1000 - bFloor.reduce((a, b) => a + b, 0)
+              const bDisplay = [...bFloor]
+              bRaw.map((v, i) => ({ i, frac: v - bFloor[i] }))
+                  .sort((a, b) => b.frac - a.frac)
+                  .slice(0, bExtra)
+                  .forEach(({ i }) => bDisplay[i]++)
+              return BUCKETS.map(({ key, amountKey, label, icon: Icon, color }, bi) => {
+                const pct = bDisplay[bi] / 10
                 const amt = alloc.monthly_amounts[amountKey] ?? 0
                 return (
                   <div key={key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <Icon className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex items-center justify-between gap-3 mb-1.5">
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground whitespace-nowrap shrink-0">
+                        <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
                         {label}
                       </div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm whitespace-nowrap shrink-0 text-right">
                         <span className="font-semibold text-foreground">{pct.toFixed(1)}%</span>
-                        {" "}· ${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo
+                        <span className="text-muted-foreground"> · <span className="text-foreground font-medium">${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>/mo</span>
                       </div>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -610,10 +744,95 @@ export default function PlanPage() {
                     </div>
                   </div>
                 )
-              })}
-            </div>
+              })
+            })()}
           </div>
-          <p className="text-xs text-muted-foreground mt-5">{alloc.summary}</p>
+          {/* Agent reasoning — debate insights + allocation + risk */}
+          {(bullWinsOn.length > 0 || bearWinsOn.length > 0 || aggressionDial !== null || allocSummary || riskSummary || verdictSummary) && (
+          <div className="pt-3 border-t border-border/50 space-y-3">
+
+            {/* Debate bull/bear breakdown */}
+            {(bullWinsOn.length > 0 || bearWinsOn.length > 0 || aggressionDial !== null) && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {bullWinsOn.length > 0 && (
+                  <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-3">
+                    <div className="text-[10px] font-semibold text-green-400 uppercase tracking-wide mb-2">Bull agent won on</div>
+                    <ul className="space-y-1">
+                      {bullWinsOn.map((pt, i) => (
+                        <li key={i} className="text-xs text-foreground/80 flex gap-1.5"><span className="text-green-400 shrink-0">+</span>{pt}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {bearWinsOn.length > 0 && (
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3">
+                    <div className="text-[10px] font-semibold text-red-400 uppercase tracking-wide mb-2">Bear agent won on</div>
+                    <ul className="space-y-1">
+                      {bearWinsOn.map((pt, i) => (
+                        <li key={i} className="text-xs text-foreground/80 flex gap-1.5"><span className="text-red-400 shrink-0">−</span>{pt}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="bg-muted/20 border border-border/40 rounded-xl p-3 space-y-3">
+                  {aggressionDial !== null && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                        Aggression dial — {aggressionDial <= 0.33 ? "Conservative" : aggressionDial <= 0.66 ? "Moderate" : "Aggressive"}
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className={cn(
+                          "h-full rounded-full",
+                          aggressionDial <= 0.33 ? "bg-blue-500" : aggressionDial <= 0.66 ? "bg-amber-500" : "bg-rose-500"
+                        )} style={{ width: `${aggressionDial * 100}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                        <span>Conservative</span><span>Aggressive</span>
+                      </div>
+                    </div>
+                  )}
+                  {riskScore !== null && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                        Risk score: <span className={riskScore >= 7 ? "text-rose-400" : riskScore >= 4 ? "text-amber-400" : "text-emerald-400"}>{riskScore.toFixed(1)} / 10</span>
+                      </div>
+                      {riskWarnings.length > 0 && (
+                        <ul className="space-y-0.5 mt-1">
+                          {riskWarnings.map((w, i) => <li key={i} className="text-[10px] text-amber-300/70">⚠ {w}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Allocator + risk manager summaries */}
+            {(allocSummary || riskSummary) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {allocSummary && (
+                <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3">
+                  <div className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide mb-1">Allocator reasoning</div>
+                  <p className="text-xs text-foreground/80">{allocSummary}</p>
+                </div>
+              )}
+              {riskSummary && (
+                <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-3">
+                  <div className="text-[10px] font-semibold text-rose-400 uppercase tracking-wide mb-1">Risk manager decision</div>
+                  <p className="text-xs text-foreground/80">{riskSummary}</p>
+                </div>
+              )}
+            </div>
+            )}
+
+            {verdictSummary && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                <div className="text-[10px] font-semibold text-primary uppercase tracking-wide mb-1">Facilitator final verdict</div>
+                <p className="text-xs text-foreground/80">{verdictSummary}</p>
+              </div>
+            )}
+          </div>
+          )}
         </div>
 
         {/* Specific Portfolio Breakdown */}
@@ -622,7 +841,7 @@ export default function PlanPage() {
 
           {/* Retirement sub-breakdown */}
           <div>
-            <h3 className="text-sm font-medium text-violet-400 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-violet-400 flex items-center gap-2 mb-2">
               <Briefcase className="w-4 h-4" /> Retirement — ${retirAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -630,36 +849,35 @@ export default function PlanPage() {
                 <div className="text-xs text-muted-foreground mb-1">401(k) contribution</div>
                 <div className="text-xl font-bold text-foreground">${monthly401k.toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {rec401kPct.toFixed(0)}% of salary · captures {match > 0 ? `${match}% employer match` : "full pre-tax benefit"}
+                  {rec401kPct.toFixed(0)}% of salary · {match > 0 ? `captures ${match}% employer match` : "full pre-tax benefit"}
                 </div>
                 {match > 0 && (
                   <div className="text-xs text-emerald-400 mt-1">+${(salary * match / 100 / 12).toLocaleString(undefined,{maximumFractionDigits:0})}/mo free from employer</div>
                 )}
               </div>
-              {roth_elig && annualRoth > 0 && (
+              {roth_elig && annualRoth > 0 ? (
                 <div className="bg-muted/30 rounded-xl p-4 border border-violet-500/20">
                   <div className="text-xs text-muted-foreground mb-1">Roth IRA</div>
                   <div className="text-xl font-bold text-foreground">${monthlyRoth.toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
                   <div className="text-xs text-muted-foreground mt-1">${Math.min(annualRoth, 7000).toLocaleString(undefined,{maximumFractionDigits:0})}/yr · tax-free growth · 2025 limit $7,000</div>
                 </div>
-              )}
-              {!roth_elig && (
+              ) : !roth_elig ? (
                 <div className="bg-muted/30 rounded-xl p-4 border border-amber-500/20">
                   <div className="text-xs text-amber-400 mb-1">Roth IRA — income too high</div>
-                  <div className="text-sm text-muted-foreground">Consider a backdoor Roth or traditional IRA instead. Max pre-tax 401k contributions first.</div>
+                  <div className="text-xs text-muted-foreground">Consider a backdoor Roth or traditional IRA. Max pre-tax 401k first.</div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
           {/* Investing sub-breakdown */}
           <div>
-            <h3 className="text-sm font-medium text-emerald-400 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-emerald-400 flex items-center gap-2 mb-2">
               <TrendingUp className="w-4 h-4" /> Taxable Investing — ${investAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {equityETFs.map((ticker, i) => {
-                const share = equityAmt / equityETFs.length
+              {equityETFs.map((ticker) => {
+                const share = equityAmt / (equityETFs.length || 1)
                 return (
                   <div key={ticker} className="bg-muted/30 rounded-xl p-4 border border-emerald-500/20">
                     <div className="flex items-center justify-between mb-1">
@@ -690,63 +908,186 @@ export default function PlanPage() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-3">Use a brokerage like Fidelity, Schwab, or Vanguard. Set up auto-invest on payday.</p>
+            <p className="text-xs text-muted-foreground mt-3">Use Fidelity, Schwab, or Vanguard — set auto-invest on payday.</p>
           </div>
+
+          {/* House Fund sub-breakdown */}
+          {houseFundAmt > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-amber-400 flex items-center gap-2 mb-2">
+                <Home className="w-4 h-4" /> House Fund — ${houseFundAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-muted/30 rounded-xl p-4 border border-amber-500/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-bold text-amber-400">HYSA</span>
+                    <span className="text-xs text-muted-foreground">Primary</span>
+                  </div>
+                  <div className="text-xl font-bold text-foreground">${Math.round(houseFundAmt * 0.8).toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">High-yield savings · liquid · ~4.5% APY. Use Marcus, Ally, or SoFi.</div>
+                </div>
+                <div className="bg-muted/30 rounded-xl p-4 border border-amber-500/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-bold text-amber-400">SCHO / I-Bond</span>
+                    <span className="text-xs text-muted-foreground">Buffer</span>
+                  </div>
+                  <div className="text-xl font-bold text-foreground">${Math.round(houseFundAmt * 0.2).toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">Short-term Treasury ETF or I-Bond if buying in 2+ yrs.</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Keep this account separate and labeled “Down Payment” — don’t mix with emergency fund.</p>
+            </div>
+          )}
+
+          {/* Speculative sub-breakdown */}
+          {specAmt > 0 && (() => {
+            const isAggressive  = (aggressionDial ?? 0.5) > 0.66
+            const isConservative = (aggressionDial ?? 0.5) <= 0.33
+            const specItems = isConservative
+              ? [
+                  { ticker: "QQQM", label: "Nasdaq 100 (low-cost)",  pct: 0.6 },
+                  { ticker: "VBK",  label: "Small-cap growth",       pct: 0.4 },
+                ]
+              : isAggressive
+              ? [
+                  { ticker: "QQQM",  label: "Nasdaq 100 growth",     pct: 0.35 },
+                  { ticker: "SOXX",  label: "Semiconductor sector",  pct: 0.25 },
+                  { ticker: "IBIT",  label: "Bitcoin ETF (BlackRock)",pct: 0.25 },
+                  { ticker: "Stocks",label: "1–3 conviction stocks",  pct: 0.15 },
+                ]
+              : [
+                  { ticker: "QQQM", label: "Nasdaq 100 growth",      pct: 0.5 },
+                  { ticker: "ARKK", label: "Disruptive innovation",  pct: 0.25 },
+                  { ticker: "VBK",  label: "Small-cap growth",       pct: 0.25 },
+                ]
+            return (
+              <div>
+                <h3 className="text-sm font-medium text-rose-400 flex items-center gap-2 mb-2">
+                  <Zap className="w-4 h-4" /> Speculative — ${specAmt.toLocaleString(undefined,{maximumFractionDigits:0})}/mo
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {specItems.map(({ ticker, label, pct }) => (
+                    <div key={ticker} className="bg-muted/30 rounded-xl p-4 border border-rose-500/20">
+                      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+                      <div className="text-base font-bold text-foreground">${Math.round(specAmt * pct).toLocaleString(undefined,{maximumFractionDigits:0})}<span className="text-xs font-normal text-muted-foreground">/mo</span></div>
+                      <div className="text-xs font-semibold text-rose-400 mt-1">{ticker}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {isConservative ? "Conservative speculative play — high-quality growth ETFs with no individual stock risk."
+                   : isAggressive ? "High-risk bucket — only invest what you can lose 100% of. Dollar-cost average monthly, don’t chase pumps."
+                   : "Moderate speculative bucket — growth ETFs only. Avoid YOLO trades. Max 1-3 individual stocks if any."}
+                </p>
+              </div>
+            )
+          })()}
+
+          {/* Agent Reports — plan.analyst_reports with event fallback */}
+          {(() => {
+            const r = plan.analyst_reports
+            const cf  = r?.cash_flow   || cfSummary
+            const ret = r?.retirement  || retSummary
+            const hou = r?.housing     || houSummary
+            const inv = r?.investment  || invSummary
+            if (!cf && !ret && !hou && !inv) return null
+            return (
+              <div className="pt-4 border-t border-border/50">
+                <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-3">Analyst Reports</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {cf && (
+                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">
+                      <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wide mb-1.5">Cash Flow Analyst</div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{cf}</p>
+                    </div>
+                  )}
+                  {ret && (
+                    <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-3">
+                      <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wide mb-1.5">Retirement Analyst</div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{ret}</p>
+                    </div>
+                  )}
+                  {hou && (
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
+                      <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wide mb-1.5">Housing Analyst</div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{hou}</p>
+                    </div>
+                  )}
+                  {inv && (
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3">
+                      <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1.5">Investment Analyst</div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{inv}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Career Trajectory */}
         {salary > 0 && (
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
             <h2 className="font-semibold text-foreground mb-1">Career Trajectory</h2>
-            <p className="text-xs text-muted-foreground mb-6">
-              Projected at {(growthRate * 100).toFixed(0)}% annual salary growth based on your risk profile.
-              As income grows, here&apos;s what you can invest more of.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-muted-foreground border-b border-border">
-                    <th className="text-left pb-3 font-medium">Year</th>
-                    <th className="text-right pb-3 font-medium">Est. Salary</th>
-                    <th className="text-right pb-3 font-medium">Monthly Surplus</th>
-                    <th className="text-right pb-3 font-medium">Investing Budget</th>
-                    <th className="text-right pb-3 font-medium">vs Today</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {careerData.map(({ yr, salary: s, surplus: sur, invest: inv }) => (
-                    <tr key={yr} className={cn("border-b border-border/40", yr === 0 && "bg-primary/5")}>
-                      <td className="py-3 font-medium text-foreground">
-                        {yr === 0 ? "Now" : `+${yr} yr${yr > 1 ? "s" : ""}`}
-                        {yr === 0 && <span className="ml-2 text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">Today</span>}
-                      </td>
-                      <td className="py-3 text-right text-foreground">${s.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
-                      <td className="py-3 text-right text-foreground">${sur.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</td>
-                      <td className="py-3 text-right text-emerald-400 font-semibold">${inv.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</td>
-                      <td className="py-3 text-right text-muted-foreground">
-                        {yr === 0 ? "—" : <span className="text-emerald-400">+${(inv - careerData[0].invest).toLocaleString(undefined,{maximumFractionDigits:0})}/mo</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mb-5 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                <span className="text-foreground font-medium">{(growthRate * 100).toFixed(0)}% annual growth</span>
+                {profile?.occupation && <span> estimated for <span className="text-foreground">{profile.occupation}</span></span>}
+                {profile?.industry && <span> in <span className="text-foreground">{profile.industry}</span></span>}.
+              </p>
+              <p className="text-xs text-muted-foreground/70 italic">{growthBasis}.</p>
             </div>
-            {/* Visual bar chart */}
-            <div className="mt-6 space-y-2">
-              {careerData.map(({ yr, invest: inv }) => (
-                <div key={yr} className="flex items-center gap-3">
-                  <div className="text-xs text-muted-foreground w-14 shrink-0">{yr === 0 ? "Now" : `+${yr}yr`}</div>
-                  <div className="flex-1 h-6 bg-muted rounded-lg overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-lg flex items-center px-2 transition-all duration-700"
-                      style={{ width: `${(inv / (careerData[careerData.length-1].invest || 1)) * 100}%` }}
-                    >
-                      {inv > 100 && <span className="text-xs text-white font-medium">${inv.toLocaleString(undefined,{maximumFractionDigits:0})}</span>}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+              {careerData.map(({ yr, salary: s, invest: inv, retire: ret, surplus: sur }) => {
+                const isNow = yr === 0
+                const extraInvest = inv - careerData[0].invest
+                return (
+                  <div key={yr} className={cn(
+                    "rounded-xl p-4 border flex flex-col gap-2",
+                    isNow ? "border-primary/40 bg-primary/5" : "border-border/60 bg-muted/20"
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                        {isNow ? "Today" : `+${yr} yr${yr > 1 ? "s" : ""}`}
+                      </span>
+                      {isNow && <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-semibold">Baseline</span>}
                     </div>
+
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">Salary</div>
+                      <div className="text-base font-bold text-foreground">${s.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] text-muted-foreground">Monthly surplus</div>
+                      <div className="text-sm font-semibold text-foreground">${sur.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</div>
+                    </div>
+
+                    <div className="pt-1 border-t border-border/40 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-emerald-400 font-medium">Investing</span>
+                        <span className="text-xs font-bold text-emerald-400">${inv.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-violet-400 font-medium">Retirement</span>
+                        <span className="text-xs font-bold text-violet-400">${ret.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</span>
+                      </div>
+                    </div>
+
+                    {!isNow && extraInvest > 0 && (
+                      <div className="text-[10px] text-emerald-300/70 mt-1">
+                        +${extraInvest.toLocaleString(undefined,{maximumFractionDigits:0})}/mo more than today
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
+
+            <p className="text-xs text-muted-foreground mt-4 border-t border-border/40 pt-4">
+              <span className="text-amber-400 font-medium">Raise rule:</span> When your salary increases, keep expenses flat and redirect the extra take-home — split it 60% investing, 30% retirement, 10% house fund.
+            </p>
           </div>
         )}
 
@@ -770,18 +1111,37 @@ export default function PlanPage() {
 
         {/* 12-month roadmap */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-foreground mb-5">12-Month Roadmap</h2>
-          <div className="relative pl-6 border-l-2 border-primary/30 space-y-6">
+          <h2 className="font-semibold text-foreground mb-1">12-Month Roadmap</h2>
+          <p className="text-xs text-muted-foreground mb-6">Month-by-month action plan with specific steps and career growth checkpoints.</p>
+          <div className="relative pl-6 border-l-2 border-primary/30 space-y-5">
             {plan.milestones_12mo.map((m, i) => (
               <div key={i} className="relative">
                 <div className="absolute -left-[1.85rem] w-4 h-4 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                 </div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-bold text-primary">{m.month ? `Month ${m.month}` : `Step ${i + 1}`}</span>
+                <div className="bg-muted/20 border border-border/60 rounded-xl p-4 hover:border-primary/30 transition-colors">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                      {m.month ? `Month ${m.month}` : `Step ${i + 1}`}
+                    </span>
+                    {m.target_metric && (
+                      <span className="text-xs font-semibold text-emerald-400">{m.target_metric}</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">{m.label}</p>
+                  {m.action && (
+                    <div className="mt-2 flex gap-2 items-start">
+                      <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">Action</span>
+                      <p className="text-xs text-foreground/80">{m.action}</p>
+                    </div>
+                  )}
+                  {m.career_note && (
+                    <div className="mt-2 flex gap-2 items-start">
+                      <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide shrink-0 mt-0.5">Career</span>
+                      <p className="text-xs text-amber-300/80">{m.career_note}</p>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm font-medium text-foreground">{m.label}</p>
-                {m.target_metric && <p className="text-xs text-muted-foreground mt-0.5">{m.target_metric}</p>}
               </div>
             ))}
           </div>
@@ -792,10 +1152,25 @@ export default function PlanPage() {
           <h2 className="font-semibold text-foreground mb-5">5-Year Vision</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {plan.milestones_5yr.map((m, i) => (
-              <div key={i} className="bg-muted/30 rounded-xl p-4 border border-violet-500/20">
-                <div className="text-xs font-bold text-violet-400 mb-1">{m.year ? `Year ${m.year}` : `Goal ${i + 1}`}</div>
-                <p className="text-sm font-medium text-foreground">{m.label}</p>
-                {m.target_metric && <p className="text-xs text-muted-foreground mt-1">{m.target_metric}</p>}
+              <div key={i} className="bg-muted/30 rounded-xl p-4 border border-violet-500/20 hover:border-violet-500/40 transition-colors">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
+                    {m.year ? `Year ${m.year}` : `Goal ${i + 1}`}
+                  </span>
+                  {m.target_metric && (
+                    <span className="text-xs font-semibold text-emerald-400">{m.target_metric}</span>
+                  )}
+                </div>
+                <p className="text-sm font-semibold text-foreground">{m.label}</p>
+                {m.action && (
+                  <div className="mt-2 flex gap-2 items-start">
+                    <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide shrink-0 mt-0.5">How</span>
+                    <p className="text-xs text-foreground/80">{m.action}</p>
+                  </div>
+                )}
+                {m.career_note && (
+                  <p className="text-xs text-amber-300/70 mt-2 italic">{m.career_note}</p>
+                )}
               </div>
             ))}
           </div>

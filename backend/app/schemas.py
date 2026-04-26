@@ -145,6 +145,8 @@ class Milestone(BaseModel):
     target_metric: Optional[str] = None  # e.g. "$18,000 in HYSA"
     month: Optional[int] = None          # 1-12 for 12-month roadmap
     year: Optional[int] = None           # for 5-year roadmap
+    action: Optional[str] = None         # Specific action to take, e.g. "Set auto-transfer of $473/mo to HYSA"
+    career_note: Optional[str] = None    # Career growth context, e.g. "If you get a raise, redirect 50% to investing"
 
 
 class NextThousand(BaseModel):
@@ -156,6 +158,24 @@ class NextThousand(BaseModel):
     discretionary: float
 
 
+class AnalystReports(BaseModel):
+    cash_flow: str = ""
+    retirement: str = ""
+    housing: str = ""
+    investment: str = ""
+
+
+class PlanInsights(BaseModel):
+    bull_wins_on: List[str] = []
+    bear_wins_on: List[str] = []
+    aggression_dial: Optional[float] = None
+    verdict_summary: str = ""
+    allocator_summary: str = ""
+    risk_score: Optional[float] = None
+    risk_summary: str = ""
+    risk_warnings: List[str] = []
+
+
 class WealthPlan(BaseModel):
     headline: str = Field(description="One personalized sentence, e.g. 'Career-rich, capital-light.'")
     health_score: float = Field(ge=0.0, le=100.0, description="Overall financial health score 0-100")
@@ -163,6 +183,8 @@ class WealthPlan(BaseModel):
     next_thousand: NextThousand
     milestones_12mo: List[Milestone]
     milestones_5yr: List[Milestone]
+    analyst_reports: AnalystReports = Field(default_factory=AnalystReports)
+    plan_insights: PlanInsights = Field(default_factory=PlanInsights)
     agent_transcript: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Ordered list of all agent events; populated by the orchestrator after synthesis.",
