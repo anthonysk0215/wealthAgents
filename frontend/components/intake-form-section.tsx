@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
+import { API_URL, authHeaders, getToken } from "@/lib/auth"
 
 const industryOptions = [
   "Technology & Software",
@@ -154,15 +155,17 @@ export function IntakeFormSection() {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
       const res = await fetch(`${API_URL}/api/plan/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(profile),
       })
       if (!res.ok) throw new Error(`API error ${res.status}`)
       const { plan_id } = await res.json()
       sessionStorage.setItem("wealthProfile", JSON.stringify(profile))
+      if (!getToken()) {
+        sessionStorage.setItem("wealthAnonymousPlan", "true")
+      }
       router.push(`/plan/${plan_id}`)
     } catch (err) {
       console.error("Failed to start plan:", err)

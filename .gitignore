@@ -2,6 +2,9 @@
 backend/.venv/
 __pycache__/
 *.py[cod]
+backend/app/data/
+*.sqlite
+*.sqlite3
 # Python
 venv/
 __pycache__/
