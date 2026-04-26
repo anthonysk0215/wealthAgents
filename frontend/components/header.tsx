@@ -4,16 +4,28 @@ import type React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { History, LogIn, Menu, UserCircle } from "lucide-react"
-import Link from "next/link" // Import Link for client-side navigation
+import { History, LogIn, LogOut, Menu, UserCircle } from "lucide-react"
+import Link from "next/link"
 import { clearAuth, getStoredUser } from "@/lib/auth"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export function Header() {
   const [userName, setUserName] = useState<string | null>(null)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setUserName(getStoredUser()?.name ?? null)
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
   const navItems = [
@@ -59,17 +71,29 @@ export function Header() {
                   History
                 </Button>
               </Link>
-              <Button
-                variant="ghost"
-                className="hidden md:flex rounded-full gap-2"
-                onClick={() => {
-                  clearAuth()
-                  setUserName(null)
-                }}
-              >
-                <UserCircle className="h-4 w-4" />
-                {userName}
-              </Button>
+              <div ref={dropdownRef} className="relative hidden md:block">
+                <Button
+                  variant="ghost"
+                  className="rounded-full gap-2"
+                  onClick={() => setDropdownOpen(o => !o)}
+                >
+                  <UserCircle className="h-4 w-4" />
+                  {userName}
+                </Button>
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-1 w-44 rounded-xl border border-border bg-card shadow-lg py-1 z-50">
+                    <div className="px-3 py-2 text-xs text-muted-foreground truncate border-b border-border mb-1">{userName}</div>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted/40 transition-colors"
+                      onClick={() => { clearAuth(); setUserName(null); setDropdownOpen(false) }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <Link href="/login" className="hidden md:block">
