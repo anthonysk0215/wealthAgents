@@ -53,7 +53,6 @@ const BullBearDebate: React.FC = () => {
             paddingBottom: "8px",
             borderBottom: "1px solid var(--realtime-border-color)"
           }}>
-            <span style={{ fontSize: "14px" }}>📈</span>
             <span style={{
               fontFamily: "'Geist', sans-serif",
               fontSize: "11px",
@@ -122,7 +121,6 @@ const BullBearDebate: React.FC = () => {
             paddingBottom: "8px",
             borderBottom: "1px solid var(--realtime-border-color)"
           }}>
-            <span style={{ fontSize: "14px" }}>📉</span>
             <span style={{
               fontFamily: "'Geist', sans-serif",
               fontSize: "11px",

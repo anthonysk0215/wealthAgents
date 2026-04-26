@@ -15,11 +15,11 @@ const AccountAnalysis: React.FC<AccountAnalysisProps> = ({ className = "" }) => 
   } as React.CSSProperties
 
   const accounts = [
-    { icon: "🏦", name: "Checking", balance: "$12,450", change: "+$2,100" },
-    { icon: "💰", name: "Savings", balance: "$45,200", change: "+$3,500" },
-    { icon: "📈", name: "Brokerage", balance: "$78,340", change: "+$8,200" },
-    { icon: "🏛️", name: "401(k)", balance: "$156,800", change: "+$12,400" },
-    { icon: "💎", name: "Roth IRA", balance: "$34,500", change: "+$4,100" },
+    { name: "Checking",  balance: "$12,450",  change: "+$2,100" },
+    { name: "Savings",   balance: "$45,200",  change: "+$3,500" },
+    { name: "Brokerage", balance: "$78,340",  change: "+$8,200" },
+    { name: "401(k)",    balance: "$156,800", change: "+$12,400" },
+    { name: "Roth IRA", balance: "$34,500",  change: "+$4,100" },
   ]
 
   return (
@@ -104,7 +104,6 @@ const AccountAnalysis: React.FC<AccountAnalysisProps> = ({ className = "" }) => 
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "14px" }}>{account.icon}</span>
                 <span style={{
                   fontFamily: "'Geist', sans-serif",
                   fontSize: "10px",
