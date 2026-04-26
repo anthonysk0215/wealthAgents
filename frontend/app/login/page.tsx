@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { API_URL, saveAuth } from "@/lib/auth"
+import { isSupabaseConfigured, supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,6 +19,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function nextPath() {
+    return new URLSearchParams(window.location.search).get("next") || "/history"
+  }
+
+  async function signInWithGoogle() {
+    setError(null)
+    if (!supabase) {
+      setError("Supabase Auth is not configured")
+      return
+    }
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath())}`
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    })
+    if (oauthError) setError(oauthError.message)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -33,8 +52,7 @@ export default function LoginPage() {
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.detail || "Authentication failed")
       saveAuth(payload.token, payload.user)
-      const next = new URLSearchParams(window.location.search).get("next")
-      router.push(next || "/history")
+      router.push(nextPath())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
@@ -75,6 +93,23 @@ export default function LoginPage() {
                 </p>
               </div>
             </div>
+
+            {isSupabaseConfigured ? (
+              <>
+                <Button type="button" variant="outline" className="w-full rounded-md" onClick={signInWithGoogle} disabled={loading}>
+                  Continue with Google
+                </Button>
+                <div className="my-5 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            ) : (
+              <p className="mb-5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                Google sign-in needs NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+              </p>
+            )}
 
             <div className="space-y-4">
               {mode === "register" && (
